@@ -1,0 +1,10 @@
+export const HarvardLogo = "/images/harvard_logo.png";
+export const StanfordLogo = "/images/stanford_logo.png";
+export const MITLogo = "/images/mit_logo.png";
+export const BerkeleyLogo = "/images/berkeley_logo.png";
+export const OxfordLogo = "/images/oxford_logo.png";
+export const CambridgeLogo = "/images/cambridge_logo.svg";
+export const YaleLogo = "/images/yale_logo.png";
+export const PrincetonLogo = "/images/princeton_logo.png";
+export const ColumbiaLogo = "/images/columbia_logo.png";
+export const ChicagoLogo = "/images/chicago_logo.png";

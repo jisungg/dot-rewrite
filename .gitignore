@@ -1,0 +1,112 @@
+# ==============================
+# dot-rewrite monorepo .gitignore
+# ==============================
+
+# ---- OS junk ----
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---- editor / IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.zed/
+
+# ---- Claude / agent tooling ----
+.claude/
+.claude-agent/
+.agent/
+.aider*
+.cursor/
+.codeium/
+.continue/
+CLAUDE.md
+AGENTS.md
+
+# ---- env / secrets ----
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+.credentials/
+secrets/
+
+# ---- logs / tmp ----
+*.log
+logs/
+tmp/
+tmp_*
+*.tmp
+.cache/
+
+# ==============================
+# dot-rewrite-web (Next.js / Bun)
+# ==============================
+dot-rewrite-web/node_modules/
+dot-rewrite-web/.next/
+dot-rewrite-web/out/
+dot-rewrite-web/build/
+dot-rewrite-web/dist/
+dot-rewrite-web/coverage/
+dot-rewrite-web/.turbo/
+dot-rewrite-web/.vercel/
+dot-rewrite-web/next-env.d.ts
+dot-rewrite-web/tsconfig.tsbuildinfo
+dot-rewrite-web/*.tsbuildinfo
+dot-rewrite-web/.env
+dot-rewrite-web/.env.*
+!dot-rewrite-web/.env.example
+dot-rewrite-web/.DS_Store
+dot-rewrite-web/.claude/
+dot-rewrite-web/storybook-static/
+
+# bun / package manager
+dot-rewrite-web/.bun/
+
+# playwright / test
+dot-rewrite-web/playwright-report/
+dot-rewrite-web/test-results/
+
+# ==============================
+# dot-rewrite-engine (Python 3.12 / uv)
+# ==============================
+dot-rewrite-engine/.venv/
+dot-rewrite-engine/__pycache__/
+dot-rewrite-engine/**/__pycache__/
+dot-rewrite-engine/*.egg-info/
+dot-rewrite-engine/**/*.egg-info/
+dot-rewrite-engine/dist/
+dot-rewrite-engine/build/
+dot-rewrite-engine/.pytest_cache/
+dot-rewrite-engine/.ruff_cache/
+dot-rewrite-engine/.mypy_cache/
+dot-rewrite-engine/.coverage
+dot-rewrite-engine/coverage.xml
+dot-rewrite-engine/htmlcov/
+dot-rewrite-engine/.env
+dot-rewrite-engine/.env.*
+!dot-rewrite-engine/.env.example
+dot-rewrite-engine/*.pyc
+dot-rewrite-engine/**/*.pyc
+dot-rewrite-engine/.DS_Store
+
+# ---- Python general ----
+*.py[cod]
+*$py.class
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.python-version.local
+
+# ---- global package caches ----
+node_modules/
+.next/
+.venv/
+__pycache__/
+*.egg-info/
