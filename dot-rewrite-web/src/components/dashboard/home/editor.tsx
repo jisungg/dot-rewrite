@@ -567,6 +567,7 @@ export default function Editor({
   }, [saveToSpace]);
 
   const handleHoldStart = () => {
+    if (!canSaveToSpace) return;
     setIsHolding(true);
     setHoldProgress(0);
     const startTime = Date.now();
@@ -625,12 +626,44 @@ export default function Editor({
     (noteTitle.trim() === "" || noteTitle === "Untitled Note") &&
     tags.length === 0;
 
+  // Normalize whitespace so edits that only add/remove spaces, tabs, or
+  // trailing newlines don't count as a real change:
+  //   - Collapse runs of spaces/tabs within a line to one space
+  //   - Strip trailing whitespace from every line
+  //   - Collapse 3+ consecutive blank lines to 2
+  //   - Trim the whole thing
+  // Paragraph breaks (single blank line) are preserved because they matter
+  // for rendered markdown and for the engine's section parser.
+  const normalizeContent = (s: string) =>
+    s
+      .split("\n")
+      .map((line) => line.replace(/[ \t]+/g, " ").replace(/[ \t]+$/, ""))
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  const normalizeTitle = (s: string) => s.replace(/\s+/g, " ").trim();
+
+  const contentChanged =
+    normalizeContent(note) !==
+    normalizeContent(initialSnapshot.current.content);
+  const titleChanged =
+    normalizeTitle(noteTitle) !==
+    normalizeTitle(initialSnapshot.current.title);
+  const tagsChanged =
+    JSON.stringify(tags) !== JSON.stringify(initialSnapshot.current.tags);
+  const spaceChanged =
+    (currentSpace?.id ?? "") !== initialSnapshot.current.spaceId;
+
   const dirty =
     !isEffectivelyEmpty &&
-    (note !== initialSnapshot.current.content ||
-      noteTitle !== initialSnapshot.current.title ||
-      JSON.stringify(tags) !== JSON.stringify(initialSnapshot.current.tags) ||
-      (currentSpace?.id ?? "") !== initialSnapshot.current.spaceId);
+    (contentChanged || titleChanged || tagsChanged || spaceChanged);
+
+  // Editing an existing note: require actual changes before saving.
+  // Creating a new note: any non-empty content is savable.
+  const isEditing = Boolean(noteContent);
+  const canSaveToSpace = isEditing
+    ? contentChanged || titleChanged || tagsChanged || spaceChanged
+    : !isEffectivelyEmpty;
 
   useEffect(() => {
     if (!apiRef) return;
@@ -814,8 +847,21 @@ export default function Editor({
                 onMouseLeave={handleHoldEnd}
                 onTouchStart={handleHoldStart}
                 onTouchEnd={handleHoldEnd}
-                className="flex items-center gap-1 text-xs text-gray-500 dark:text-zinc-400 hover:text-gray-800 dark:hover:text-zinc-100 transition-colors duration-150 relative"
+                disabled={!canSaveToSpace}
+                className={`flex items-center gap-1 text-xs transition-colors duration-150 relative ${
+                  canSaveToSpace
+                    ? "text-gray-500 dark:text-zinc-400 hover:text-gray-800 dark:hover:text-zinc-100"
+                    : "text-gray-300 dark:text-zinc-600 cursor-not-allowed"
+                }`}
                 aria-label="Add to space"
+                aria-disabled={!canSaveToSpace}
+                title={
+                  canSaveToSpace
+                    ? `Hold to save to ${currentSpace.code.toUpperCase()}`
+                    : isEditing
+                      ? "No changes to save"
+                      : "Add some content first"
+                }
               >
                 <div className="relative w-4 h-4">
                   <svg
@@ -867,18 +913,26 @@ export default function Editor({
               </button>
               <div className="absolute right-0 top-full z-10 mt-2 w-sm opacity-0 rounded-md border border-gray-100/80 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3 shadow-md transition-all duration-200 group-hover:opacity-100">
                 <div className="space-y-1.5">
-                  <p className="text-xs text-gray-600 dark:text-zinc-400">
-                    Hold to save &quot;
-                    <span className="font-medium">
-                      {truncate(noteTitle, { length: 14 }) || "Untitled Note"}
-                    </span>
-                    &quot; to{" "}
-                    <span className="font-bold">
-                      {currentSpace.code.toUpperCase()}
-                    </span>{" "}
-                    space
-                  </p>
-                  {isTitleDuplicate && (
+                  {canSaveToSpace ? (
+                    <p className="text-xs text-gray-600 dark:text-zinc-400">
+                      Hold to save &quot;
+                      <span className="font-medium">
+                        {truncate(noteTitle, { length: 14 }) || "Untitled Note"}
+                      </span>
+                      &quot; to{" "}
+                      <span className="font-bold">
+                        {currentSpace.code.toUpperCase()}
+                      </span>{" "}
+                      space
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500 dark:text-zinc-500">
+                      {isEditing
+                        ? "No changes to save — edit the title, content, tags, or space to enable."
+                        : "Add some content before saving."}
+                    </p>
+                  )}
+                  {isTitleDuplicate && canSaveToSpace && (
                     <>
                       <p className="text-xs text-amber-600 flex items-center gap-1 mt-1">
                         <AlertCircle className="h-3 w-3 mr-1" />

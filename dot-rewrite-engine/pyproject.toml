@@ -17,10 +17,13 @@ dependencies = [
     "leidenalg>=0.10",
     "networkx>=3.3",
     "spacy>=3.7",
+    "sentence-transformers>=3.0",
+    "anthropic>=0.45",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+ollama = ["openai>=1.40"]
 
 [project.scripts]
 analyze-space = "engine.pipeline.runner:main"

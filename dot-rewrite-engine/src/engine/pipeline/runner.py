@@ -45,6 +45,8 @@ from ..diagnose import (
     prereq_gap as diag_prereq,
 )
 from ..drift import collect as drift_collect
+from ..embed import encode as embed_encode, semantic_graph as sem_graph
+from ..llm import labeler as llm_labeler
 from ..explain import (
     explain_confusion,
     explain_foundational,
@@ -72,12 +74,16 @@ from ..ingest import (
 from ..models import (
     DiagnosticResult,
     EdgeKind,
+    HierarchyPath,
     NoteRecord,
     RankingExplanation,
+    SemanticCluster,
+    SemanticEdge,
     SimilarityEdge,
     SpaceProfile,
     SpaceProfileKind,
     TopicCluster,
+    UngroupedNote,
 )
 from ..presets import FeatureFlags, from_env as flags_from_env
 from ..rank import rankings
@@ -113,7 +119,8 @@ def main() -> None:
         run = store_write.start_run(conn, args.space_id, __version__, snapshot)
         try:
             notes = store_read.fetch_space_notes(conn, args.space_id)
-            result = run_analysis(notes, cfg)
+            cached_embeddings = store_read.fetch_cached_embeddings(conn, args.space_id)
+            result = run_analysis(notes, cfg, cached_embeddings=cached_embeddings)
             store_write.replace_sim_edges(conn, args.space_id, result["sim_edges"])
             store_write.replace_study_edges(conn, args.space_id, result["study_edges"])
             store_write.replace_topics(conn, args.space_id, result["topics"])
@@ -121,8 +128,33 @@ def main() -> None:
             store_write.replace_diagnostics(conn, result["diag"])
             store_write.replace_explanations(conn, args.space_id, result["explanations"])
             store_write.replace_run_metrics(conn, run.id, result["metrics"])
-            store_write.finish_run(conn, run, "ok", len(notes),
-                                   notes_text=f"profile={result['profile'].kind.value}")
+            # Primary semantic layer.
+            store_write.upsert_embeddings(
+                conn, args.space_id, result["embeddings"],
+                live_note_ids={n.id for n in notes},
+            )
+            store_write.replace_semantic_edges(
+                conn, args.space_id, result["semantic_edges"],
+            )
+            store_write.replace_semantic_clusters(
+                conn, args.space_id, result["semantic_clusters"],
+            )
+            store_write.replace_topic_hierarchy(
+                conn, args.space_id, result["hierarchy_paths"],
+            )
+            store_write.replace_ungrouped_notes(
+                conn, args.space_id, result["ungrouped_notes"],
+            )
+            marked = store_write.mark_notes_processed(conn, args.space_id)
+            store_write.finish_run(
+                conn, run, "ok", len(notes),
+                notes_text=(
+                    f"profile={result['profile'].kind.value} "
+                    f"semantic={len(result['semantic_clusters'])} "
+                    f"sem_edges={len(result['semantic_edges'])} "
+                    f"marked={marked}"
+                ),
+            )
             log.info("run %s ok: profile=%s topics=%d surfaced=%s drift=%s",
                      run.id, result["profile"].kind.value,
                      len(result["topics"]),
@@ -139,6 +171,7 @@ def run_analysis(
     priors: list | None = None,
     baseline_metrics: list | None = None,
     flags: FeatureFlags | None = None,
+    cached_embeddings: dict | None = None,
 ) -> dict:
     """Full production pipeline in memory. Returns artifacts + surfaced rankings."""
     if flags is None:
@@ -162,6 +195,13 @@ def run_analysis(
     _stage("ingest", lambda: _ingest(notes, cfg), None)
     _stage("roles", lambda: apply_roles(notes), None)
 
+    # ---------- semantic layer (primary) ----------
+    embeddings = _stage(
+        "semantic_encode",
+        lambda: embed_encode.encode_notes(notes, cached_embeddings or {}),
+        {},
+    )
+
     # safeguards + profile
     health = audit(notes)
     if flags.use_space_profile_adaptation:
@@ -178,7 +218,8 @@ def run_analysis(
         gate_policy = GatePolicy()
         density_factor = 1.0
 
-    # represent
+    # represent (keeps lexical + co-occurrence available for keyword
+    # extraction and as a secondary, algorithmic signal layer)
     lex_space, cooc = _stage("represent", lambda: _represent(notes), (None, None))
     if lex_space is None:
         return _empty_result(notes, health=health, profile=profile)
@@ -198,6 +239,76 @@ def run_analysis(
                            mutual=graph_params.mutual_knn and len(notes) >= 5,
                        ),
                        [])
+
+    # ---------- semantic graph + clusters (primary) ----------
+    sem_matrix, sem_ids = embed_encode.as_matrix([n.id for n in notes], embeddings)
+    semantic_edges: list[SemanticEdge] = _stage(
+        "semantic_knn",
+        lambda: sem_graph.build_edges(
+            sem_matrix,
+            sem_ids,
+            sem_graph.SemanticGraphParams(
+                k=cfg.semantic.k,
+                min_similarity=cfg.semantic.min_similarity,
+                mutual_only=cfg.semantic.mutual_only,
+            ),
+        ) if sem_matrix.size > 0 else [],
+        [],
+    )
+    semantic_clusters: list[SemanticCluster] = _stage(
+        "semantic_cluster",
+        lambda: sem_graph.leiden_clusters(
+            sem_ids,
+            semantic_edges,
+            space_id=notes[0].space_id,
+            resolution=cfg.semantic.leiden_resolution,
+        ) if sem_matrix.size > 0 else [],
+        [],
+    )
+    _label_semantic_clusters(
+        semantic_clusters, sem_matrix, sem_ids, lex_space, notes,
+    )
+
+    # LLM label pass (lightweight): one cheap batch call that rewrites
+    # each cluster's `label` + `parent_topic` with concrete, human-readable
+    # names. Does NOT re-cluster or summarize. Fails soft: on any error we
+    # keep the algorithmic keyword labels.
+    patches = _stage(
+        "semantic_llm_label",
+        lambda: llm_labeler.label(notes, semantic_clusters, cfg.llm_labeler)
+        if semantic_clusters
+        else None,
+        None,
+    )
+    if patches:
+        llm_labeler.apply_patches(semantic_clusters, patches)
+    hierarchy_paths: list[HierarchyPath] = []
+    seen_paths: set[tuple[str, ...]] = set()
+    for c in semantic_clusters:
+        if not c.hierarchy_path:
+            continue
+        key = tuple(c.hierarchy_path)
+        if key in seen_paths:
+            continue
+        seen_paths.add(key)
+        hierarchy_paths.append(HierarchyPath(space_id=c.space_id, path=list(key)))
+
+    # Ungrouped notes: sourced locally (not the LLM). A note is "ungrouped"
+    # when it has no embedding (empty content / failed encode) and therefore
+    # lives in no semantic cluster.
+    clustered_ids: set[str] = set()
+    for c in semantic_clusters:
+        clustered_ids.update(c.note_ids)
+    ungrouped_notes: list[UngroupedNote] = [
+        UngroupedNote(
+            space_id=n.space_id,
+            note_id=n.id,
+            title=n.title or f"Untitled ({n.id[:6]})",
+            reason="No embedding signal — note may be empty or unprocessable.",
+        )
+        for n in notes
+        if n.id not in clustered_ids
+    ]
 
     # graph
     g, topics, communities_vertex = _stage(
@@ -412,6 +523,11 @@ def run_analysis(
     return {
         "notes": notes, "health": health, "profile": profile, "adjustment_density": density_factor,
         "gate_policy": gate_policy,
+        "embeddings": embeddings,
+        "semantic_edges": semantic_edges,
+        "semantic_clusters": semantic_clusters,
+        "ungrouped_notes": ungrouped_notes,
+        "hierarchy_paths": hierarchy_paths,
         "sim_edges": sim_edges, "study_edges": study, "topics": topics,
         "diag": diag, "signatures": signatures,
         "rankings": ranked_legacy,
@@ -435,6 +551,80 @@ def run_analysis(
 
 # ---------- helpers ----------
 
+
+def _subset_cohesion(matrix, ids: list[str], note_ids: list[str]) -> float:
+    """Mean pairwise cosine similarity of a subset of notes (unit vectors)."""
+    if matrix is None or len(note_ids) < 2 or matrix.size == 0:
+        return 0.0
+    idx_of = {nid: i for i, nid in enumerate(ids)}
+    rows = [matrix[idx_of[n]] for n in note_ids if n in idx_of]
+    if len(rows) < 2:
+        return 0.0
+    import numpy as np
+    sub = np.vstack(rows)
+    sim = sub @ sub.T
+    n = sub.shape[0]
+    total = float(sim.sum() - n)  # exclude diagonal (1.0 each)
+    pairs = n * (n - 1)
+    return total / pairs if pairs else 0.0
+
+
+def _label_semantic_clusters(
+    clusters: list[SemanticCluster],
+    matrix,
+    ids: list[str],
+    lex_space,
+    notes: list[NoteRecord],
+    top_k: int = 6,
+) -> None:
+    """Extract top-TF-IDF terms per semantic cluster for labels + keywords.
+
+    Runs in-place. Centroid (normalized) stored as cluster centroid.
+    """
+    if not clusters:
+        return
+
+    note_idx = {n.id: i for i, n in enumerate(notes)}
+    lex_note_idx = (
+        {nid: i for i, nid in enumerate(lex_space.note_ids)} if lex_space else {}
+    )
+
+    for c in clusters:
+        c.centroid = sem_graph.centroid(matrix, ids, c.note_ids)
+
+        if lex_space is not None and c.note_ids:
+            rows = [lex_note_idx[n] for n in c.note_ids if n in lex_note_idx]
+            if rows:
+                try:
+                    import numpy as np
+                    mean_vec = np.asarray(
+                        lex_space.tfidf[rows].mean(axis=0)
+                    ).ravel()
+                    if mean_vec.size > 0 and float(mean_vec.max()) > 0:
+                        top = mean_vec.argsort()[::-1][:top_k]
+                        c.keywords = [
+                            lex_space.vocab[j]
+                            for j in top
+                            if float(mean_vec[j]) > 0
+                            and not lex_space.vocab[j].startswith("math_")
+                        ][:top_k]
+                except Exception:
+                    c.keywords = []
+
+        if not c.label:
+            if c.keywords:
+                c.label = sem_graph.label_from_keywords(c.keywords)
+            else:
+                # fall back to the first note's title if nothing else
+                first = next(
+                    (notes[note_idx[n]].title for n in c.note_ids if n in note_idx),
+                    None,
+                )
+                c.label = first or "Untitled cluster"
+
+
+
+
 def _empty_diag(notes):
     return DiagnosticResult(
         space_id=notes[0].space_id if notes else "",
@@ -451,6 +641,11 @@ def _empty_result(notes, health=None, profile=None):
         "profile": profile or SpaceProfile(SpaceProfileKind.BALANCED, 0.0),
         "adjustment_density": 1.0,
         "gate_policy": GatePolicy(),
+        "embeddings": {},
+        "semantic_edges": [],
+        "semantic_clusters": [],
+        "ungrouped_notes": [],
+        "hierarchy_paths": [],
         "sim_edges": [], "study_edges": [], "topics": [],
         "diag": _empty_diag(notes), "signatures": [],
         "rankings": {}, "surfaced": {"related_edges": [], "confusion": [],
@@ -509,7 +704,9 @@ def _fuse_all_pairs(notes, lex_space, cooc, fusion_weights) -> dict[tuple[int, i
     out: dict[tuple[int, int], SimilarityEdge] = {}
     for i, j in combinations(range(len(notes)), 2):
         lex = float(cos[i, j])
-        if lex < 0.02:
+        # Precision floor: drop pairs with trivial lexical overlap before
+        # spending cycles on phrase / structural / neighborhood scoring.
+        if lex < 0.05:
             continue
         ph = sim_phrase.score(set(notes[i].phrases), set(notes[j].phrases))
         st = sim_structural.score(notes[i], notes[j])

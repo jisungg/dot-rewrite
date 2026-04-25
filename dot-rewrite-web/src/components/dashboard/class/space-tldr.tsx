@@ -1,12 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { Sparkles, ScanText, Search, Copy, Check } from "lucide-react";
+import {
+  ScanText,
+  Search,
+  Copy,
+  Check,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 
 import type { Note, Space } from "@/data/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { fetchSpaceSummary } from "@/lib/summary-client";
 
 function stripMd(text: string): string {
   return text
@@ -24,42 +32,31 @@ function truncate(s: string, max: number): string {
 }
 
 function buildNoteSummary(note: Note): string {
+  const cached = note.cache?.summary;
+  if (cached && cached.length > 0) return cached;
   const plain = stripMd(note.content);
   if (!plain) return "";
   return truncate(plain, 280);
 }
 
-function buildSpaceSummary(notes: Note[], space: Space): string {
-  if (notes.length === 0) return "";
-  const tagCounts: Record<string, number> = {};
-  for (const n of notes) {
-    for (const t of n.tags) tagCounts[t] = (tagCounts[t] ?? 0) + 1;
-  }
-  const topTags = Object.entries(tagCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4)
-    .map(([t]) => `#${t}`);
+type SpaceSummaryState = {
+  summary: string;
+  cached: boolean;
+  fallback: boolean;
+  detail: string | null;
+  updated_at: string | null;
+  // Client-side signature of the note set at the time the summary was
+  // taken. Used to gate the Regenerate button: it's only enabled when the
+  // current note set differs from this signature (i.e. a note was added,
+  // edited, archived, or moved).
+  signature: string;
+};
 
-  const totalWords = notes.reduce(
-    (sum, n) => sum + stripMd(n.content).split(/\s+/).filter(Boolean).length,
-    0,
-  );
-
-  const lines: string[] = [];
-  lines.push(
-    `${space.name} has ${notes.length} note${notes.length === 1 ? "" : "s"} totaling roughly ${totalWords.toLocaleString()} word${totalWords === 1 ? "" : "s"}.`,
-  );
-  if (topTags.length > 0) {
-    lines.push(`Recurring themes: ${topTags.join(", ")}.`);
-  }
-  const titles = notes
-    .slice(0, 3)
-    .map((n) => n.title || "Untitled Note")
-    .join(", ");
-  if (titles) {
-    lines.push(`Most recent entries include ${titles}.`);
-  }
-  return lines.join(" ");
+function noteSetSignature(notes: Note[]): string {
+  return notes
+    .map((n) => `${n.id}:${n.last_modified_at ?? n.created_at ?? ""}`)
+    .sort()
+    .join("|");
 }
 
 export default function SpaceTldr({
@@ -73,6 +70,70 @@ export default function SpaceTldr({
 }) {
   const [query, setQuery] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [state, setState] = useState<SpaceSummaryState | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Seed immediately from any cached summary on the space row.
+  useEffect(() => {
+    const c = focusedSpace.summary_cache;
+    if (c && typeof c.summary === "string" && c.summary.length > 0) {
+      setState({
+        summary: c.summary,
+        cached: true,
+        fallback: false,
+        detail: null,
+        updated_at: c.updated_at ?? null,
+        signature: noteSetSignature(userNotes),
+      });
+    } else {
+      setState(null);
+    }
+    setError(null);
+  }, [focusedSpace.id, focusedSpace.summary_cache]);
+
+  const load = useCallback(
+    async (force = false) => {
+      if (userNotes.length === 0) {
+        setState({
+          summary: "",
+          cached: false,
+          fallback: false,
+          detail: null,
+          updated_at: null,
+          signature: noteSetSignature(userNotes),
+        });
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetchSpaceSummary(focusedSpace.id, { force });
+        setState({
+          summary: res.summary,
+          cached: res.cached,
+          fallback: Boolean(res.fallback),
+          detail: res.detail ?? null,
+          updated_at: res.updated_at ?? null,
+          signature: noteSetSignature(userNotes),
+        });
+      } catch (err) {
+        console.error("space summary:", err);
+        setError(err instanceof Error ? err.message : "summary_failed");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [focusedSpace.id, userNotes.length],
+  );
+
+  // Lazy-fetch on mount / space change if not already seeded.
+  useEffect(() => {
+    if (state || loading) return;
+    if (userNotes.length === 0) return;
+    void load(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedSpace.id, userNotes.length]);
 
   const summaries = useMemo(
     () =>
@@ -94,11 +155,6 @@ export default function SpaceTldr({
     );
   }, [summaries, query]);
 
-  const spaceSummary = useMemo(
-    () => buildSpaceSummary(userNotes, focusedSpace),
-    [userNotes, focusedSpace],
-  );
-
   const copy = async (id: string, text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -108,6 +164,16 @@ export default function SpaceTldr({
       // silent
     }
   };
+
+  const spaceSummary = state?.summary ?? "";
+  const currentSignature = useMemo(
+    () => noteSetSignature(userNotes),
+    [userNotes],
+  );
+  const hasNewNotes =
+    !state || (state.signature !== currentSignature && !state.fallback);
+  const canRegenerate =
+    !loading && userNotes.length > 0 && (hasNewNotes || !state);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -131,23 +197,6 @@ export default function SpaceTldr({
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-6 space-y-5">
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-start gap-2 rounded-md border border-dashed border-gray-100/80 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/50 px-3 py-2"
-          >
-            <Sparkles className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-medium text-zinc-700 dark:text-zinc-200">
-                Space-wide summary
-              </div>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                AI-generated summary coming soon. Showing heuristic overview and
-                per-note excerpts for now.
-              </p>
-            </div>
-          </motion.div>
-
           {userNotes.length === 0 ? (
             <div className="rounded-lg border border-dashed border-gray-100/80 dark:border-zinc-700 p-10 text-center">
               <ScanText className="h-5 w-5 text-zinc-300 dark:text-zinc-600 mx-auto mb-2" />
@@ -172,32 +221,91 @@ export default function SpaceTldr({
                 />
                 <div className="p-5">
                   <div className="flex items-center justify-between gap-3 mb-2">
-                    <div className="text-[10px] uppercase tracking-wide font-medium text-zinc-400 dark:text-zinc-500">
-                      Space Summary
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-[10px] gap-1"
-                      onClick={() => copy("__space__", spaceSummary)}
-                      disabled={!spaceSummary}
-                    >
-                      {copiedId === "__space__" ? (
-                        <>
-                          <Check className="h-3 w-3" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-3 w-3" />
-                          Copy
-                        </>
+                    <div className="flex items-center gap-2">
+                      <div className="text-[10px] uppercase tracking-wide font-medium text-zinc-400 dark:text-zinc-500">
+                        Space Summary
+                      </div>
+                      {state && (
+                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                          {state.fallback
+                            ? "local fallback"
+                            : state.cached
+                              ? "cached"
+                              : "fresh"}
+                          {state.updated_at && (
+                            <>
+                              {" · "}
+                              {new Date(state.updated_at).toLocaleDateString()}
+                            </>
+                          )}
+                        </span>
                       )}
-                    </Button>
+                      {loading && (
+                        <Loader2 className="h-3 w-3 animate-spin text-zinc-400 dark:text-zinc-500" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-[10px] gap-1"
+                        onClick={() => load(true)}
+                        disabled={!canRegenerate}
+                        title={
+                          canRegenerate
+                            ? "Regenerate summary"
+                            : "Already up to date — add or edit a note to enable."
+                        }
+                      >
+                        <RefreshCw
+                          className={`h-3 w-3 ${loading ? "animate-spin" : ""}`}
+                        />
+                        Regenerate
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-[10px] gap-1"
+                        onClick={() => copy("__space__", spaceSummary)}
+                        disabled={!spaceSummary}
+                      >
+                        {copiedId === "__space__" ? (
+                          <>
+                            <Check className="h-3 w-3" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3" />
+                            Copy
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-200 break-words whitespace-pre-wrap">
-                    {spaceSummary}
-                  </p>
+                  {error && (
+                    <div className="text-[11px] text-red-600 dark:text-red-400 mb-2">
+                      {error}
+                    </div>
+                  )}
+                  {state?.fallback && state.detail && (
+                    <div className="text-[11px] text-amber-700 dark:text-amber-400 mb-2">
+                      LLM call failed: {state.detail}
+                    </div>
+                  )}
+                  {loading && !spaceSummary ? (
+                    <p className="text-[13px] italic text-zinc-400 dark:text-zinc-500">
+                      Generating…
+                    </p>
+                  ) : spaceSummary ? (
+                    <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-200 break-words whitespace-pre-wrap">
+                      {spaceSummary}
+                    </p>
+                  ) : (
+                    <p className="text-[13px] italic text-zinc-400 dark:text-zinc-500">
+                      No summary yet — regenerate to build one.
+                    </p>
+                  )}
                 </div>
               </motion.div>
 

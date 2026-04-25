@@ -1,10 +1,21 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import NumberFlow from "@number-flow/react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, Check, ArrowRight, Loader2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import remarkEmoji from "remark-emoji";
+import rehypeKatex from "rehype-katex";
+import rehypePrism from "rehype-prism-plus";
+import rehypeHighlight from "rehype-highlight";
+import rehypeSanitize from "rehype-sanitize";
+import "highlight.js/styles/github.css";
+import "katex/dist/katex.min.css";
+import "@/data/css/prism.css";
 
 import {
   Tooltip,
@@ -34,7 +45,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDisplayText, getRandomLoadingMessage } from "@/lib/string";
-import { addMsgHistory, getMsgHistory } from "@/utils/supabase/queries";
+import { getMsgHistory } from "@/utils/supabase/queries";
+import { streamDotChat } from "@/lib/dot/client";
 import { Countdown } from "../components/countdown";
 import { EmptyState, LoadingState } from "../components/agent-states";
 
@@ -43,7 +55,14 @@ interface DotProps {
   allNotes: Note[];
   userNotes: Note[];
   focusedSpace: Space;
+  onNoteClick?: (note: Note) => void;
 }
+
+// We intentionally use a fragment URL form `#note-<uuid>` for note links.
+// Hash URLs are unconditionally whitelisted by rehype-sanitize, so we don't
+// need a custom schema, and the browser doesn't navigate when we
+// preventDefault() on click.
+const NOTE_HREF_PREFIX = "#note-";
 
 const ArtificialIntelligence04Icon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
@@ -178,7 +197,11 @@ const DeletePutBackIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-export default function Dot({ userNotes, focusedSpace }: DotProps) {
+export default function Dot({
+  userNotes,
+  focusedSpace,
+  onNoteClick,
+}: DotProps) {
   const [message, setMessage] = useState<string>("");
   const [messageHistory, setMessageHistory] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -250,24 +273,46 @@ export default function Dot({ userNotes, focusedSpace }: DotProps) {
       return;
     }
 
+    const submitted = message.trim();
     setLoading(true);
+    setOutput("");
+    setLoadingMessage(getRandomLoadingMessage());
+
+    // Record the user turn locally so it shows in history immediately.
+    // The server persists the canonical copy inside /api/dot/chat.
+    const now = new Date().toISOString();
+    const optimisticUserMsg: Message = {
+      id: `optimistic-${now}`,
+      space_id: focusedSpace.id,
+      user_id: "",
+      role: "user",
+      content: submitted,
+      timestamp: now,
+    };
+    setMessageHistory((prev) => [...prev, optimisticUserMsg]);
+    setMessage("");
 
     try {
-      const mockResponse = `Dot has processed your message: "${message}"`;
-      setOutput(mockResponse);
-
-      await new Promise((r) => setTimeout(r, 50000));
-
-      const userMessage = await addMsgHistory({
-        space_id: focusedSpace.id,
-        role: "user",
-        content: message,
+      const { full } = await streamDotChat({
+        spaceId: focusedSpace.id,
+        prompt: submitted,
+        focusedNoteId: focusedNote === "all" ? null : focusedNote.id,
+        onToken: (_chunk, running) => setOutput(running),
       });
-      setMessageHistory((prev) => [...prev, userMessage]);
-      setMessage("");
-      setLoadingMessage(getRandomLoadingMessage());
+      // Mirror the persisted assistant turn into local history so the
+      // dropdown is in sync without another round trip.
+      const dotMsg: Message = {
+        id: `dot-${new Date().toISOString()}`,
+        space_id: focusedSpace.id,
+        user_id: "",
+        role: "dot",
+        content: full,
+        timestamp: new Date().toISOString(),
+      };
+      setMessageHistory((prev) => [...prev, dotMsg]);
     } catch (error) {
-      toast.error("Failed to process request");
+      const msg = error instanceof Error ? error.message : "Failed";
+      toast.error(`Dot: ${msg}`);
       console.error(error);
     } finally {
       setLoading(false);
@@ -611,9 +656,13 @@ export default function Dot({ userNotes, focusedSpace }: DotProps) {
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="space-y-4 pb-16 text-gray-800 dark:text-zinc-100 text-sm"
+                    className="pb-16"
                   >
-                    <p>{output}</p>
+                    <DotResponse
+                      output={output}
+                      notes={userNotes}
+                      onNoteClick={onNoteClick}
+                    />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -629,6 +678,129 @@ export default function Dot({ userNotes, focusedSpace }: DotProps) {
           </motion.div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DotResponse({
+  output,
+  notes,
+  onNoteClick,
+}: {
+  output: string;
+  notes: Note[];
+  onNoteClick?: (note: Note) => void;
+}) {
+  const noteById = useMemo(() => {
+    const m = new Map<string, Note>();
+    for (const n of notes) m.set(n.id, n);
+    return m;
+  }, [notes]);
+
+  // Belt-and-suspenders: catch any `<a href="#note-...">` click that
+  // didn't go through our component renderer (e.g. if a future plugin
+  // bypasses `components.a`) and route it to the modal.
+  const handleWrapperClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    const link = target?.closest?.("a[href^='#note-']") as
+      | HTMLAnchorElement
+      | null;
+    if (!link) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const href = link.getAttribute("href") ?? "";
+    const noteId = decodeURIComponent(href.slice(NOTE_HREF_PREFIX.length));
+    const note = noteById.get(noteId);
+    if (note && onNoteClick) onNoteClick(note);
+  };
+
+  return (
+    <div
+      className="prose prose-zinc dark:prose-invert max-w-none text-sm break-words prose-p:my-2 prose-li:my-0.5 prose-pre:my-2 prose-code:before:content-none prose-code:after:content-none"
+      onClick={handleWrapperClick}
+    >
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkEmoji, remarkMath]}
+        rehypePlugins={[
+          rehypeHighlight,
+          rehypeSanitize,
+          rehypeKatex,
+          [rehypePrism, { ignoreMissing: true }],
+        ]}
+        components={{
+          ul: ({ children, ...props }) => (
+            <ul
+              className="list-disc pl-5 my-2 space-y-1 marker:text-zinc-400 dark:marker:text-zinc-500"
+              {...props}
+            >
+              {children}
+            </ul>
+          ),
+          ol: ({ children, ...props }) => (
+            <ol
+              className="list-decimal pl-5 my-2 space-y-1 marker:text-zinc-400 dark:marker:text-zinc-500"
+              {...props}
+            >
+              {children}
+            </ol>
+          ),
+          li: ({ children, ...props }) => (
+            <li className="leading-relaxed [&>p]:my-0" {...props}>
+              {children}
+            </li>
+          ),
+          a: (props) => {
+            const { href, children } = props as {
+              href?: string;
+              children?: React.ReactNode;
+            };
+            const isNoteLink =
+              typeof href === "string" && href.startsWith(NOTE_HREF_PREFIX);
+            if (isNoteLink) {
+              const noteId = decodeURIComponent(
+                (href ?? "").slice(NOTE_HREF_PREFIX.length),
+              );
+              const note = noteById.get(noteId);
+              const enabled = Boolean(note && onNoteClick);
+              return (
+                <a
+                  href={href}
+                  data-note-id={noteId}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (note && onNoteClick) onNoteClick(note);
+                  }}
+                  className={`inline-flex items-center gap-0.5 rounded px-1 py-0 text-blue-600 dark:text-blue-400 underline decoration-blue-400/40 hover:decoration-blue-500 transition-colors ${
+                    enabled
+                      ? "hover:bg-blue-50 dark:hover:bg-blue-950/30 cursor-pointer"
+                      : "opacity-60 cursor-not-allowed"
+                  }`}
+                  title={
+                    note
+                      ? `Open ${note.title || "note"}`
+                      : "Note not available in this space"
+                  }
+                >
+                  {children}
+                </a>
+              );
+            }
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 dark:text-blue-400 underline"
+              >
+                {children}
+              </a>
+            );
+          },
+        }}
+      >
+        {output}
+      </ReactMarkdown>
     </div>
   );
 }

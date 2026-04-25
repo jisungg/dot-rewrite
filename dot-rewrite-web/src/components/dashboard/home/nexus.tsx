@@ -3,6 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import {
+  fetchSimEdges,
+  fetchTopicClusters,
+  fetchSemanticEdges,
+  fetchSemanticClusters,
+} from "@/utils/supabase/queries";
+import type {
+  SimEdge,
+  TopicClusterRow,
+  SemanticEdgeRow,
+  SemanticClusterRow,
+} from "@/data/types";
+import {
   Plus,
   Minus,
   Search,
@@ -48,13 +60,109 @@ export default function Nexus({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [activeSpace, setActiveSpace] = useState<string | "all">("all");
   const [searchTerm, setSearchTerm] = useState("");
+  // Debounced copy of searchTerm used by the graph rebuild effect so the
+  // simulation doesn't tear down on every keystroke (fixes the multi-second
+  // lag while typing).
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchTerm), 180);
+    return () => clearTimeout(id);
+  }, [searchTerm]);
   const [isSpaceDropdownOpen, setIsSpaceDropdownOpen] = useState(false);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [sidePanelOpen, setSidePanelOpen] = useState(true);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  // Cached node positions so re-renders warm-start instead of flinging nodes
+  // back to the center every time.
+  const positionCacheRef = useRef<Map<string, { x: number; y: number }>>(
+    new Map(),
+  );
 
   const simulationRef = useRef<d3.Simulation<NoteNode, LinkDatum> | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+
+  const [simEdges, setSimEdges] = useState<SimEdge[]>([]);
+  const [topics, setTopics] = useState<TopicClusterRow[]>([]);
+  const [semanticEdges, setSemanticEdges] = useState<SemanticEdgeRow[]>([]);
+  const [semanticClusters, setSemanticClusters] = useState<
+    SemanticClusterRow[]
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const spaceIds = allSpaces.map((s) => s.id);
+    if (spaceIds.length === 0) {
+      setSimEdges([]);
+      setTopics([]);
+      setSemanticEdges([]);
+      setSemanticClusters([]);
+      return;
+    }
+    (async () => {
+      try {
+        const [edges, tps, sEdges, sClusters] = await Promise.all([
+          fetchSimEdges(spaceIds),
+          fetchTopicClusters(spaceIds),
+          fetchSemanticEdges(spaceIds),
+          fetchSemanticClusters(spaceIds),
+        ]);
+        if (!cancelled) {
+          setSimEdges(edges);
+          setTopics(tps);
+          setSemanticEdges(sEdges);
+          setSemanticClusters(sClusters);
+        }
+      } catch (err) {
+        console.error("nexus engine fetch:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [allSpaces]);
+
+  // Prefer semantic clusters for coloring; group by the top-level parent
+  // topic (e.g. "Mathematics") so a whole subject shares a color — falls
+  // back to the cluster's stable id if no parent/hierarchy is set.
+  const clusterByNoteId = useMemo(() => {
+    const m = new Map<
+      string,
+      {
+        id: string;
+        stable_id: string | null;
+        label: string | null;
+        group_key: string;
+        parent: string | null;
+      }
+    >();
+    for (const c of semanticClusters) {
+      const parent =
+        c.hierarchy_path && c.hierarchy_path.length > 0
+          ? c.hierarchy_path[0]
+          : c.parent_topic;
+      const key = parent ?? c.stable_id ?? c.id;
+      for (const nid of c.note_ids)
+        m.set(nid, {
+          id: c.id,
+          stable_id: c.stable_id,
+          label: c.label,
+          group_key: key,
+          parent: parent ?? null,
+        });
+    }
+    if (m.size > 0) return m;
+    for (const t of topics) {
+      for (const nid of t.note_ids)
+        m.set(nid, {
+          id: t.id,
+          stable_id: t.stable_id,
+          label: t.label,
+          group_key: t.stable_id ?? t.id,
+          parent: null,
+        });
+    }
+    return m;
+  }, [semanticClusters, topics]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -83,8 +191,8 @@ export default function Nexus({
       if (activeSpace !== "all" && note.space_id !== activeSpace) return false;
       if (activeTag && !note.tags.includes(activeTag)) return false;
 
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
+      if (debouncedSearch) {
+        const term = debouncedSearch.toLowerCase();
         return (
           note.title.toLowerCase().includes(term) ||
           note.content.toLowerCase().includes(term) ||
@@ -93,7 +201,7 @@ export default function Nexus({
       }
       return true;
     });
-  }, [allNotes, activeSpace, searchTerm, activeTag]);
+  }, [allNotes, activeSpace, debouncedSearch, activeTag]);
 
   const tagStats = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -106,6 +214,41 @@ export default function Nexus({
   }, [allNotes]);
 
   const generatedClusters = useMemo(() => {
+    if (semanticClusters.length > 0) {
+      return semanticClusters
+        .slice()
+        .sort((a, b) => b.note_ids.length - a.note_ids.length)
+        .slice(0, 8)
+        .map((c) => ({
+          id: `semantic:${c.id}`,
+          label:
+            c.label ||
+            (c.keywords[0]
+              ? c.keywords[0].charAt(0).toUpperCase() + c.keywords[0].slice(1)
+              : "Cluster"),
+          hint:
+            c.hierarchy_path && c.hierarchy_path.length > 1
+              ? c.hierarchy_path.slice(0, -1).join(" / ")
+              : (c.parent_topic ?? "topic"),
+          size: c.note_ids.length,
+        }));
+    }
+    if (topics.length > 0) {
+      return topics
+        .slice()
+        .sort((a, b) => b.note_ids.length - a.note_ids.length)
+        .slice(0, 8)
+        .map((t) => ({
+          id: `topic:${t.id}`,
+          label:
+            t.label ||
+            (t.keywords[0]
+              ? t.keywords[0].charAt(0).toUpperCase() + t.keywords[0].slice(1)
+              : "Topic"),
+          hint: "algorithmic topic",
+          size: t.note_ids.length,
+        }));
+    }
     const byTag: Record<string, Note[]> = {};
     for (const n of allNotes) {
       for (const t of n.tags) {
@@ -137,7 +280,7 @@ export default function Nexus({
       }
     }
     return clusters.slice(0, 8);
-  }, [allNotes, allSpaces]);
+  }, [semanticClusters, topics, allNotes, allSpaces]);
 
   const recentNotes = useMemo(() => {
     return [...allNotes]
@@ -178,16 +321,19 @@ export default function Nexus({
       d3.zoomIdentity.translate(width / 4, height / 4).scale(0.8),
     );
 
-    const nodes: NoteNode[] = filteredNotes.map((note) => ({
-      ...note,
-      x: undefined,
-      y: undefined,
-      vx: undefined,
-      vy: undefined,
-      fx: undefined,
-      fy: undefined,
-      index: undefined,
-    }));
+    const nodes: NoteNode[] = filteredNotes.map((note) => {
+      const prior = positionCacheRef.current.get(note.id);
+      return {
+        ...note,
+        x: prior?.x,
+        y: prior?.y,
+        vx: undefined,
+        vy: undefined,
+        fx: undefined,
+        fy: undefined,
+        index: undefined,
+      };
+    });
 
     const links: LinkDatum[] = [];
     const notesBySpace: Record<string, Note[]> = {};
@@ -197,92 +343,87 @@ export default function Nexus({
       notesBySpace[note.space_id].push(note);
     });
 
-    Object.values(notesBySpace).forEach((spaceNotes) => {
-      if (spaceNotes.length > 1) {
-        for (let i = 0; i < spaceNotes.length; i++) {
-          const nextIndex = (i + 1) % spaceNotes.length;
-          links.push({
-            source: spaceNotes[i].id,
-            target: spaceNotes[nextIndex].id,
-            value: 1,
-          });
+    const visibleIds = new Set(filteredNotes.map((n) => n.id));
+    const visibleSemantic = semanticEdges.filter(
+      (e) => visibleIds.has(e.src_note_id) && visibleIds.has(e.dst_note_id),
+    );
+    const visibleFused = simEdges.filter(
+      (e) => visibleIds.has(e.src_note_id) && visibleIds.has(e.dst_note_id),
+    );
 
-          if (spaceNotes.length > 3) {
-            const randomIndex = Math.floor(Math.random() * spaceNotes.length);
-            if (randomIndex !== i && randomIndex !== nextIndex) {
-              links.push({
-                source: spaceNotes[i].id,
-                target: spaceNotes[randomIndex].id,
-                value: 0.7,
-              });
-            }
-          }
-        }
+    if (visibleSemantic.length > 0) {
+      // PRIMARY: semantic (embedding cosine) edges.
+      for (const e of visibleSemantic) {
+        links.push({
+          source: e.src_note_id,
+          target: e.dst_note_id,
+          value: Math.max(0.1, e.similarity),
+        });
       }
-    });
-
-    // Shared-tag relations (placeholder AI-style cross-links)
-    const notesByTag: Record<string, Note[]> = {};
-    filteredNotes.forEach((note) => {
-      for (const t of note.tags) {
-        if (!notesByTag[t]) notesByTag[t] = [];
-        notesByTag[t].push(note);
+    } else if (visibleFused.length > 0) {
+      // Secondary: fused algorithmic edges.
+      for (const e of visibleFused) {
+        links.push({
+          source: e.src_note_id,
+          target: e.dst_note_id,
+          value: Math.max(0.08, e.weight),
+        });
       }
-    });
-    const seenPair = new Set<string>();
-    Object.values(notesByTag).forEach((group) => {
-      if (group.length < 2) return;
-      for (let i = 0; i < group.length; i++) {
-        for (let j = i + 1; j < group.length; j++) {
-          const a = group[i].id;
-          const b = group[j].id;
-          const key = a < b ? `${a}|${b}` : `${b}|${a}`;
-          if (seenPair.has(key)) continue;
-          seenPair.add(key);
-          links.push({ source: a, target: b, value: 0.5 });
-        }
-      }
-    });
-
-    if (activeSpace === "all" && Object.keys(notesBySpace).length > 1) {
-      const spaceIds = Object.keys(notesBySpace);
-      for (let i = 0; i < spaceIds.length; i++) {
-        const currentSpaceNotes = notesBySpace[spaceIds[i]];
-        if (currentSpaceNotes && currentSpaceNotes.length > 0) {
-          const nextSpaceIndex = (i + 1) % spaceIds.length;
-          const nextSpaceNotes = notesBySpace[spaceIds[nextSpaceIndex]];
-
-          if (nextSpaceNotes && nextSpaceNotes.length > 0) {
-            const sourceNote =
-              currentSpaceNotes[
-                Math.floor(Math.random() * currentSpaceNotes.length)
-              ];
-            const targetNote =
-              nextSpaceNotes[
-                Math.floor(Math.random() * nextSpaceNotes.length)
-              ];
+    } else {
+      // Fallback: placeholder structural links when engine has not run yet.
+      Object.values(notesBySpace).forEach((spaceNotes) => {
+        if (spaceNotes.length > 1) {
+          for (let i = 0; i < spaceNotes.length; i++) {
+            const nextIndex = (i + 1) % spaceNotes.length;
             links.push({
-              source: sourceNote.id,
-              target: targetNote.id,
-              value: 0.4,
+              source: spaceNotes[i].id,
+              target: spaceNotes[nextIndex].id,
+              value: 1,
             });
           }
         }
-      }
+      });
+
+      const notesByTag: Record<string, Note[]> = {};
+      filteredNotes.forEach((note) => {
+        for (const t of note.tags) {
+          if (!notesByTag[t]) notesByTag[t] = [];
+          notesByTag[t].push(note);
+        }
+      });
+      const seenPair = new Set<string>();
+      Object.values(notesByTag).forEach((group) => {
+        if (group.length < 2) return;
+        for (let i = 0; i < group.length; i++) {
+          for (let j = i + 1; j < group.length; j++) {
+            const a = group[i].id;
+            const b = group[j].id;
+            const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+            if (seenPair.has(key)) continue;
+            seenPair.add(key);
+            links.push({ source: a, target: b, value: 0.5 });
+          }
+        }
+      });
     }
 
+    // Faster-settling simulation — alphaDecay ~2× default so the graph
+    // stabilises in ~1-2s instead of 4-5s.
     const simulation = d3
       .forceSimulation<NoteNode, LinkDatum>(nodes)
+      .alphaDecay(0.05)
+      .velocityDecay(0.3)
       .force(
         "link",
         d3
           .forceLink<NoteNode, LinkDatum>(links)
           .id((d) => d.id)
-          .distance((d) => 90 / (d.value || 1)),
+          .distance((d) => 90 / (d.value || 1))
+          .strength((d) => Math.min(1, d.value * 1.2)),
       )
-      .force("charge", d3.forceManyBody().strength(-300))
+      .force("charge", d3.forceManyBody().strength(-260).distanceMax(320))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collide", d3.forceCollide().radius(15));
+      .force("collide", d3.forceCollide().radius(14));
 
     if (activeSpace === "all") {
       simulation.force(
@@ -318,15 +459,49 @@ export default function Nexus({
 
     simulationRef.current = simulation;
 
+    const linkTier = (v: number) => {
+      if (v >= 0.65) return "strong";
+      if (v >= 0.4) return "medium";
+      return "weak";
+    };
+    const linkStroke = (v: number) => {
+      const t = linkTier(v);
+      if (t === "strong") return "#2563eb"; // blue-600
+      if (t === "medium") return "#60a5fa"; // blue-400
+      return "#cbd5e1"; // slate-300
+    };
+
     const link = g
       .append("g")
       .selectAll<SVGLineElement, LinkDatum>(".link")
       .data(links)
       .join("line")
       .attr("class", "link")
-      .attr("stroke", "#B8B8B7")
-      .attr("stroke-opacity", (d) => d.value * 0.95)
-      .attr("stroke-width", (d) => Math.sqrt(d.value * 2.5 || 1));
+      .attr("stroke", (d) => linkStroke(d.value))
+      .attr("stroke-opacity", (d) => Math.min(0.9, 0.35 + d.value * 0.6))
+      .attr("stroke-width", (d) => Math.max(0.8, Math.sqrt(d.value * 4)))
+      .style("cursor", "pointer");
+
+    link
+      .append("title")
+      .text((d) => {
+        const src = typeof d.source === "object" ? d.source.title : d.source;
+        const dst = typeof d.target === "object" ? d.target.title : d.target;
+        const tier = linkTier(d.value);
+        return `${src} ↔ ${dst}\nrelation: ${tier} (${(d.value * 100).toFixed(0)}%)`;
+      });
+
+    link
+      .on("mouseover", function (_, d) {
+        d3.select(this)
+          .attr("stroke-opacity", Math.min(1, 0.7 + d.value * 0.3))
+          .attr("stroke-width", Math.max(1.8, Math.sqrt(d.value * 8)));
+      })
+      .on("mouseout", function (_, d) {
+        d3.select(this)
+          .attr("stroke-opacity", Math.min(0.9, 0.35 + d.value * 0.6))
+          .attr("stroke-width", Math.max(0.8, Math.sqrt(d.value * 4)));
+      });
 
     const node = g
       .append("g")
@@ -374,10 +549,30 @@ export default function Nexus({
 
     node.call(drag);
 
+    const clusterPalette = d3.schemeTableau10;
+    const groupIndex = new Map<string, number>();
+    let groupCounter = 0;
+    const assignGroup = (key: string) => {
+      if (!groupIndex.has(key)) groupIndex.set(key, groupCounter++);
+    };
+    for (const c of semanticClusters) {
+      const parent =
+        c.hierarchy_path && c.hierarchy_path.length > 0
+          ? c.hierarchy_path[0]
+          : c.parent_topic;
+      assignGroup(parent ?? c.stable_id ?? c.id);
+    }
+    for (const t of topics) assignGroup(t.stable_id ?? t.id);
+
     node
       .append("circle")
       .attr("r", 5)
       .attr("fill", (d: NoteNode) => {
+        const cluster = clusterByNoteId.get(d.id);
+        if (cluster) {
+          const idx = groupIndex.get(cluster.group_key) ?? 0;
+          return clusterPalette[idx % clusterPalette.length];
+        }
         const space = allSpaces.find((s) => s.id === d.space_id);
         return space ? space.color : "#ccc";
       })
@@ -542,11 +737,30 @@ export default function Nexus({
       node.attr("transform", (d) => `translate(${d.x!},${d.y!})`);
     });
 
+    // Persist final positions so the next rebuild warm-starts from here.
+    simulation.on("end", () => {
+      for (const n of nodes) {
+        if (typeof n.x === "number" && typeof n.y === "number") {
+          positionCacheRef.current.set(n.id, { x: n.x, y: n.y });
+        }
+      }
+    });
+
     return () => {
       if (simulationRef.current) simulationRef.current.stop();
       measureSvg.remove();
     };
-  }, [dimensions, filteredNotes, allSpaces, activeSpace]);
+  }, [
+    dimensions,
+    filteredNotes,
+    allSpaces,
+    activeSpace,
+    simEdges,
+    semanticEdges,
+    semanticClusters,
+    topics,
+    clusterByNoteId,
+  ]);
 
   const handleZoomIn = () => {
     if (svgRef.current && zoomRef.current) {
@@ -733,9 +947,9 @@ export default function Nexus({
                     className="h-2 w-2 rounded-full flex-shrink-0"
                     style={{ backgroundColor: space.color }}
                   />
-                  <span className="truncate max-w-[160px]">
-                    {space.name.length > 25
-                      ? space.name.slice(0, 22) + "..."
+                  <span className="truncate max-w-[220px]">
+                    {space.name.length > 34
+                      ? space.name.slice(0, 31) + "..."
                       : space.name}
                   </span>
                 </div>
@@ -757,7 +971,7 @@ export default function Nexus({
         </div>
 
         {sidePanelOpen && (
-          <aside className="w-64 flex-shrink-0 border border-gray-100/80 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900 overflow-y-auto glow-border-lg">
+          <aside className="w-80 flex-shrink-0 border border-gray-100/80 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900 overflow-y-auto glow-border-lg">
             <div className="p-3 border-b border-gray-100/80 dark:border-zinc-800 flex items-start gap-2">
               <Sparkles className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0 mt-0.5" />
               <div className="min-w-0">
@@ -765,8 +979,33 @@ export default function Nexus({
                   Relations
                 </div>
                 <div className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                  AI clustering coming soon. Showing shared-tag + space
-                  groupings.
+                  {semanticClusters.length > 0
+                    ? `${semanticClusters.length} semantic cluster${
+                        semanticClusters.length === 1 ? "" : "s"
+                      } · ${semanticEdges.length} embedding edge${
+                        semanticEdges.length === 1 ? "" : "s"
+                      }.`
+                    : topics.length > 0
+                      ? `${topics.length} algorithmic topic${
+                          topics.length === 1 ? "" : "s"
+                        } · ${simEdges.length} fused edge${
+                          simEdges.length === 1 ? "" : "s"
+                        }.`
+                      : "Engine not run yet. Showing shared-tag + space groupings."}
+                </div>
+                <div className="mt-2 flex items-center gap-3 text-[9px] text-zinc-500 dark:text-zinc-400">
+                  <span className="flex items-center gap-1">
+                    <span className="h-0.5 w-4 rounded-full bg-blue-600" />
+                    strong
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="h-0.5 w-4 rounded-full bg-blue-400" />
+                    medium
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="h-0.5 w-4 rounded-full bg-slate-300" />
+                    weak
+                  </span>
                 </div>
               </div>
             </div>
@@ -794,6 +1033,18 @@ export default function Nexus({
                           } else if (c.id.startsWith("space:")) {
                             setActiveSpace(c.id.slice(6));
                             setActiveTag(null);
+                          } else if (c.id.startsWith("semantic:")) {
+                            const cl = semanticClusters.find(
+                              (x) => x.id === c.id.slice(9),
+                            );
+                            if (cl?.keywords[0]) setSearchTerm(cl.keywords[0]);
+                          } else if (c.id.startsWith("topic:")) {
+                            const topic = topics.find(
+                              (t) => t.id === c.id.slice(6),
+                            );
+                            if (topic?.keywords[0]) {
+                              setSearchTerm(topic.keywords[0]);
+                            }
                           }
                         }}
                         className="w-full text-left flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-[11px] text-zinc-700 dark:text-zinc-200 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"

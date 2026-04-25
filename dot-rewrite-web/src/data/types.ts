@@ -22,6 +22,12 @@ export type Profile = {
   preferences: UserPreferences;
 };
 
+export type SpaceSummaryCache = {
+  summary?: string;
+  content_hash?: string;
+  updated_at?: string | null;
+};
+
 export type Space = {
   id: string;
   user_id: string;
@@ -30,16 +36,21 @@ export type Space = {
   color: string;
   color_light: string;
   created_at: string;
+  summary_cache?: SpaceSummaryCache | null;
 };
 
+export type OutlineHeading = { level: number; text: string };
+
 export type NoteCache = {
-  summary: string;
-  keywords: string[];
-  embedding: number[];
-  related_note_ids: string[];
-  agent_responses: Record<string, string>;
-  auto_tags: string[];
-  updated_at: string | null;
+  summary?: string;
+  outline?: OutlineHeading[];
+  content_hash?: string;
+  keywords?: string[];
+  embedding?: number[];
+  related_note_ids?: string[];
+  agent_responses?: Record<string, string>;
+  auto_tags?: string[];
+  updated_at?: string | null;
 };
 
 export type Note = {
@@ -68,7 +79,11 @@ export type Message = {
 
 export type Views = "home" | "space";
 export type HomeSectionViewports = "editor" | "editEditor" | "notes" | "nexus";
-export type SpaceSectionViewports = "dot" | "outline" | "tl;dr";
+export type SpaceSectionViewports =
+  | "dot"
+  | "outline"
+  | "tl;dr"
+  | "relationships";
 export type BottomSectionViewports = "settings" | "logOut" | "backToHome";
 export type AllViewports =
   | HomeSectionViewports
@@ -86,6 +101,127 @@ export type RenderOptions = {
 export type views = Views;
 export type allViewports = AllViewports;
 export type renderOptions = RenderOptions;
+
+// ============================================================
+// Engine analysis outputs (read-only from engine-owned tables)
+// ============================================================
+
+export type SimEdge = {
+  space_id: string;
+  src_note_id: string;
+  dst_note_id: string;
+  weight: number;
+  confidence: number;
+  views_supporting: number;
+};
+
+export type TopicClusterRow = {
+  id: string;
+  space_id: string;
+  stable_id: string | null;
+  label: string | null;
+  keywords: string[];
+  note_ids: string[];
+  centroid_terms: string[];
+  structural_certainty: number;
+};
+
+export type TopicSubclusterRow = {
+  id: string;
+  space_id: string;
+  parent_id: string;
+  label: string | null;
+  keywords: string[];
+  note_ids: string[];
+};
+
+export type ConfusionPairRow = {
+  space_id: string;
+  topic_a: string;
+  topic_b: string;
+  score: number;
+  closeness: number;
+  separability: number;
+  interpretive_confidence: number;
+  shared_core_terms: string[];
+  discriminators_a: string[];
+  discriminators_b: string[];
+};
+
+export type ConceptHubRow = {
+  space_id: string;
+  term: string;
+  degree: number;
+  note_ids: string[];
+};
+
+export type NoteDiagnosticRow = {
+  space_id: string;
+  note_id: string;
+  prereq_gap: number;
+  integration: number;
+  is_isolated: boolean;
+  is_foundational: boolean;
+  is_bridge: boolean;
+};
+
+export type StudyStateEdgeRow = {
+  space_id: string;
+  src_node_id: string;
+  dst_node_id: string;
+  kind: string;
+  weight: number;
+};
+
+export type SemanticEdgeRow = {
+  space_id: string;
+  src_note_id: string;
+  dst_note_id: string;
+  similarity: number;
+  mutual: boolean;
+};
+
+export type SemanticClusterRow = {
+  id: string;
+  space_id: string;
+  stable_id: string | null;
+  label: string | null;
+  keywords: string[];
+  note_ids: string[];
+  cohesion: number;
+  parent_topic: string | null;
+  hierarchy_path: string[];
+  evidence_terms: string[];
+  excluded_terms: string[];
+  secondary_topics: string[];
+  llm_confidence: number;
+  source: string;
+};
+
+export type TopicHierarchyPathRow = {
+  space_id: string;
+  path: string[];
+};
+
+export type UngroupedNoteRow = {
+  space_id: string;
+  note_id: string;
+  title: string;
+  reason: string;
+};
+
+export type SpaceRelationships = {
+  semanticClusters: SemanticClusterRow[];
+  semanticEdges: SemanticEdgeRow[];
+  hierarchyPaths: TopicHierarchyPathRow[];
+  ungrouped: UngroupedNoteRow[];
+  topics: TopicClusterRow[];
+  subclusters: TopicSubclusterRow[];
+  confusion: ConfusionPairRow[];
+  hubs: ConceptHubRow[];
+  diagnostics: NoteDiagnosticRow[];
+  prereqEdges: StudyStateEdgeRow[];
+};
 
 export const AgentInformation = {
   name: "Dot",
@@ -132,5 +268,5 @@ Examples:
     "Search-free memory (works even without explicit keywords)",
     "Responsive to vague or fuzzy prompts",
   ],
-  averageTime: 34,
+  averageTime: 8,
 } as const;

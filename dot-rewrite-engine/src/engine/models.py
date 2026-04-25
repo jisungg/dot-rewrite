@@ -186,6 +186,66 @@ class RunMetrics:
 
 
 @dataclass
+class NoteEmbedding:
+    """Per-note dense vector. Produced from section-weighted mean of a
+    transformer sentence encoder. L2-normalized so cosine = dot product.
+    """
+    space_id: str
+    note_id: str
+    model: str
+    dim: int
+    vector: list[float]
+    content_hash: str  # hash of the exact text fed into the encoder
+
+
+@dataclass
+class SemanticEdge:
+    """Edge produced from cosine similarity between dense note embeddings.
+
+    Distinct from SimilarityEdge (which fuses lexical/phrase/structural/etc)
+    so downstream UIs can show them side-by-side.
+    """
+    src: str
+    dst: str
+    similarity: float            # cosine in [−1, 1] (typically [0, 1])
+    mutual: bool = False         # both endpoints list each other in top-k
+
+
+@dataclass
+class SemanticCluster:
+    id: str
+    space_id: str
+    note_ids: list[str]
+    label: str | None = None
+    keywords: list[str] = field(default_factory=list)
+    centroid: list[float] = field(default_factory=list)
+    stable_id: str | None = None
+    cohesion: float = 0.0         # mean intra-cluster cosine similarity
+    # ---- LLM-enrichment fields (populated by engine.llm.labeler) ----
+    parent_topic: str | None = None
+    hierarchy_path: list[str] = field(default_factory=list)  # e.g. ["Math", "Linear Algebra", "Vector Projections"]
+    evidence_terms: list[str] = field(default_factory=list)
+    excluded_terms: list[str] = field(default_factory=list)
+    secondary_topics: list[str] = field(default_factory=list)
+    llm_confidence: float = 0.0
+    source: str = "semantic"         # "semantic" | "llm_labeled"
+
+
+@dataclass
+class UngroupedNote:
+    space_id: str
+    note_id: str
+    title: str
+    reason: str
+
+
+@dataclass
+class HierarchyPath:
+    space_id: str
+    path: list[str]
+
+
+@dataclass
 class AnalysisRun:
     id: str
     space_id: str

@@ -1,7 +1,16 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Pin, Sparkles, ListTree, FileText } from "lucide-react";
+import {
+  X,
+  Pin,
+  Sparkles,
+  ListTree,
+  FileText,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -15,10 +24,11 @@ import "highlight.js/styles/github.css";
 import "katex/dist/katex.min.css";
 import "@/data/css/prism.css";
 
-import type { Note, Space } from "@/data/types";
+import type { Note, OutlineHeading, Space } from "@/data/types";
 import { markdownComponents } from "@/lib/markdown-components";
 import { capitalizeWords } from "@/lib/string";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { fetchNoteSummary } from "@/lib/summary-client";
 
 const remarkPlugins = [remarkGfm, remarkEmoji, remarkToc, remarkMath];
 const rehypePlugins: import("unified").PluggableList = [
@@ -28,30 +38,22 @@ const rehypePlugins: import("unified").PluggableList = [
   [rehypePrism, { ignoreMissing: true }],
 ];
 
-function buildOutlinePlaceholder(note: Note): { level: number; text: string }[] {
-  const headings: { level: number; text: string }[] = [];
-  const lines = note.content.split("\n");
-  for (const line of lines) {
+function localOutline(content: string): OutlineHeading[] {
+  const headings: OutlineHeading[] = [];
+  for (const line of content.split("\n")) {
     const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
-    if (match) {
-      headings.push({ level: match[1].length, text: match[2] });
-    }
+    if (match) headings.push({ level: match[1].length, text: match[2] });
   }
   return headings;
 }
 
-function buildTldrPlaceholder(note: Note): string {
-  const plain = note.content
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/`[^`]*`/g, "")
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/[#>*_~-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!plain) return "";
-  return plain.length > 320 ? plain.slice(0, 317) + "..." : plain;
-}
+type SummaryState = {
+  summary: string;
+  outline: OutlineHeading[];
+  cached: boolean;
+  fallback: boolean;
+  updated_at: string | null;
+};
 
 export default function NoteView({
   note,
@@ -62,8 +64,77 @@ export default function NoteView({
   space: Space | null;
   onClose: () => void;
 }) {
-  const outline = note ? buildOutlinePlaceholder(note) : [];
-  const tldr = note ? buildTldrPlaceholder(note) : "";
+  const [activeTab, setActiveTab] = useState<"content" | "outline" | "tldr">(
+    "content",
+  );
+  const [state, setState] = useState<SummaryState | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset state when switching notes.
+  useEffect(() => {
+    setState(null);
+    setError(null);
+    setActiveTab("content");
+  }, [note?.id]);
+
+  // Seed from the note's cached summary if present.
+  useEffect(() => {
+    if (!note) return;
+    const cache = note.cache;
+    if (
+      cache &&
+      typeof cache.summary === "string" &&
+      cache.summary.length > 0
+    ) {
+      setState({
+        summary: cache.summary,
+        outline: cache.outline ?? [],
+        cached: true,
+        fallback: false,
+        updated_at: cache.updated_at ?? null,
+      });
+    }
+  }, [note?.id, note?.cache]);
+
+  const load = useCallback(
+    async (force = false) => {
+      if (!note) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetchNoteSummary(note.id, { force });
+        setState({
+          summary: res.summary,
+          outline: res.outline,
+          cached: res.cached,
+          fallback: Boolean(res.fallback),
+          updated_at: res.updated_at ?? null,
+        });
+      } catch (err) {
+        console.error("note summary:", err);
+        setError(err instanceof Error ? err.message : "summary_failed");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [note],
+  );
+
+  // Lazy-fetch the first time the user opens outline or tl;dr.
+  useEffect(() => {
+    if (!note) return;
+    if (activeTab === "content") return;
+    if (state || loading) return;
+    void load(false);
+  }, [activeTab, note, state, loading, load]);
+
+  // Fallback outline derived from headings in the raw markdown — shown
+  // instantly even before the LLM call returns.
+  const outlineForRender = useMemo<OutlineHeading[]>(() => {
+    if (state?.outline && state.outline.length > 0) return state.outline;
+    return note ? localOutline(note.content) : [];
+  }, [state, note]);
 
   return (
     <AnimatePresence>
@@ -129,8 +200,14 @@ export default function NoteView({
               </button>
             </header>
 
-            <Tabs defaultValue="content" className="flex-1 flex flex-col min-h-0 gap-0">
-              <div className="flex-shrink-0 border-b border-gray-100/80 dark:border-zinc-800 px-4 py-2">
+            <Tabs
+              value={activeTab}
+              onValueChange={(v) =>
+                setActiveTab(v as "content" | "outline" | "tldr")
+              }
+              className="flex-1 flex flex-col min-h-0 gap-0"
+            >
+              <div className="flex-shrink-0 border-b border-gray-100/80 dark:border-zinc-800 px-4 py-2 flex items-center justify-between gap-2">
                 <TabsList className="bg-gray-100 dark:bg-zinc-800">
                   <TabsTrigger value="content" className="text-xs gap-1.5">
                     <FileText className="h-3 w-3" />
@@ -145,6 +222,35 @@ export default function NoteView({
                     TL;DR
                   </TabsTrigger>
                 </TabsList>
+                {activeTab !== "content" && (
+                  <div className="flex items-center gap-2 text-[10px] text-gray-400 dark:text-zinc-500">
+                    {loading && (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>Generating…</span>
+                      </>
+                    )}
+                    {!loading && state && (
+                      <>
+                        <span>
+                          {state.fallback
+                            ? "local fallback"
+                            : state.cached
+                              ? "cached"
+                              : "fresh"}
+                        </span>
+                        <button
+                          onClick={() => load(true)}
+                          className="hover:text-gray-700 dark:hover:text-zinc-200 flex items-center gap-1"
+                          aria-label="Regenerate"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Regenerate
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               <TabsContent
@@ -173,21 +279,19 @@ export default function NoteView({
                 className="flex-1 overflow-auto p-6 min-h-0 data-[state=inactive]:hidden"
               >
                 <div className="max-w-3xl mx-auto space-y-4">
-                  <div className="flex items-start gap-2 rounded-md border border-dashed border-gray-100/80 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/50 px-3 py-2">
-                    <Sparkles className="h-3.5 w-3.5 text-gray-400 dark:text-zinc-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-[11px] text-gray-500 dark:text-zinc-400 leading-relaxed">
-                      AI-generated outline coming soon. Showing heading structure
-                      detected in your note for now.
-                    </p>
-                  </div>
-                  {outline.length === 0 ? (
+                  {error && (
+                    <div className="text-xs text-red-600 dark:text-red-400">
+                      {error}
+                    </div>
+                  )}
+                  {outlineForRender.length === 0 ? (
                     <div className="text-xs text-gray-400 dark:text-zinc-500 italic py-12 text-center">
                       No headings detected. Add headings (#, ##, ###) to your
-                      note to preview an outline.
+                      note to generate an outline.
                     </div>
                   ) : (
                     <ol className="space-y-1.5">
-                      {outline.map((h, i) => (
+                      {outlineForRender.map((h, i) => (
                         <li
                           key={`${i}-${h.text}`}
                           className="flex gap-3 text-sm text-gray-700 dark:text-zinc-300 break-words"
@@ -211,20 +315,28 @@ export default function NoteView({
                 className="flex-1 overflow-auto p-6 min-h-0 data-[state=inactive]:hidden"
               >
                 <div className="max-w-3xl mx-auto space-y-4">
-                  <div className="flex items-start gap-2 rounded-md border border-dashed border-gray-100/80 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/50 px-3 py-2">
-                    <Sparkles className="h-3.5 w-3.5 text-gray-400 dark:text-zinc-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-[11px] text-gray-500 dark:text-zinc-400 leading-relaxed">
-                      AI-generated summary coming soon. Showing a truncated
-                      excerpt of your note for now.
-                    </p>
-                  </div>
-                  {tldr ? (
+                  {error && (
+                    <div className="text-xs text-red-600 dark:text-red-400">
+                      {error}
+                    </div>
+                  )}
+                  {loading && !state ? (
+                    <div className="flex items-center justify-center py-12 text-xs text-gray-400 dark:text-zinc-500">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Generating summary…
+                    </div>
+                  ) : state?.summary ? (
                     <div className="rounded-lg border border-gray-100/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 glow-border">
-                      <div className="text-[10px] uppercase tracking-wide font-medium text-gray-400 dark:text-zinc-500 mb-2">
-                        Summary
+                      <div className="text-[10px] uppercase tracking-wide font-medium text-gray-400 dark:text-zinc-500 mb-2 flex items-center gap-2">
+                        <span>Summary</span>
+                        {state.updated_at && (
+                          <span className="text-gray-300 dark:text-zinc-600 normal-case tracking-normal font-normal">
+                            · {new Date(state.updated_at).toLocaleDateString()}
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm leading-relaxed text-gray-700 dark:text-zinc-300 whitespace-pre-wrap break-words">
-                        {tldr}
+                        {state.summary}
                       </p>
                     </div>
                   ) : (

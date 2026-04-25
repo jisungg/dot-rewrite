@@ -20,11 +20,16 @@ from ..models import (
     AnalysisRun,
     ConfusionPair,
     DiagnosticResult,
+    HierarchyPath,
+    NoteEmbedding,
     RankingExplanation,
     RunMetrics,
+    SemanticCluster,
+    SemanticEdge,
     SimilarityEdge,
     SpaceProfile,
     TopicCluster,
+    UngroupedNote,
 )
 
 
@@ -200,6 +205,148 @@ def replace_confusion_pairs(conn: psycopg.Connection, space_id: str, pairs: list
               p.shared_terms, p.missing_distinguishing_terms)
              for p in pairs],
         )
+
+
+def upsert_embeddings(
+    conn: psycopg.Connection,
+    space_id: str,
+    embeddings: dict[str, NoteEmbedding],
+    live_note_ids: set[str],
+) -> None:
+    """Upsert supplied embeddings and delete rows for notes that no longer exist."""
+    with conn.cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO note_embeddings
+              (space_id, note_id, model, dim, vector, content_hash)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (space_id, note_id) DO UPDATE SET
+              model = EXCLUDED.model,
+              dim = EXCLUDED.dim,
+              vector = EXCLUDED.vector,
+              content_hash = EXCLUDED.content_hash,
+              created_at = now()
+            """,
+            [
+                (space_id, e.note_id, e.model, e.dim, list(e.vector), e.content_hash)
+                for e in embeddings.values()
+            ],
+        )
+        if live_note_ids:
+            cur.execute(
+                """
+                DELETE FROM note_embeddings
+                 WHERE space_id = %s
+                   AND NOT (note_id::text = ANY(%s))
+                """,
+                (space_id, list(live_note_ids)),
+            )
+
+
+def replace_semantic_edges(
+    conn: psycopg.Connection, space_id: str, edges: list[SemanticEdge]
+) -> None:
+    rows = []
+    for e in edges:
+        a, b = (e.src, e.dst) if e.src < e.dst else (e.dst, e.src)
+        rows.append((space_id, a, b, e.similarity, bool(e.mutual)))
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM note_semantic_edges WHERE space_id = %s", (space_id,))
+        cur.executemany(
+            """
+            INSERT INTO note_semantic_edges
+              (space_id, src_note_id, dst_note_id, similarity, mutual)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            rows,
+        )
+
+
+def replace_semantic_clusters(
+    conn: psycopg.Connection, space_id: str, clusters: list[SemanticCluster]
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM semantic_topic_clusters WHERE space_id = %s", (space_id,)
+        )
+        for c in clusters:
+            cur.execute(
+                """
+                INSERT INTO semantic_topic_clusters
+                  (id, space_id, stable_id, label, keywords, note_ids, centroid, cohesion,
+                   parent_topic, hierarchy_path, evidence_terms, excluded_terms,
+                   secondary_topics, llm_confidence, source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    c.id, space_id, c.stable_id, c.label, c.keywords, c.note_ids,
+                    list(c.centroid), c.cohesion,
+                    c.parent_topic, list(c.hierarchy_path),
+                    list(c.evidence_terms), list(c.excluded_terms),
+                    list(c.secondary_topics), c.llm_confidence, c.source,
+                ),
+            )
+
+
+def replace_topic_hierarchy(
+    conn: psycopg.Connection, space_id: str, paths: list[HierarchyPath]
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM topic_hierarchy_paths WHERE space_id = %s", (space_id,)
+        )
+        seen: set[tuple[str, ...]] = set()
+        rows = []
+        for p in paths:
+            key = tuple(p.path)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            rows.append((space_id, list(p.path)))
+        cur.executemany(
+            "INSERT INTO topic_hierarchy_paths (space_id, path) VALUES (%s, %s)",
+            rows,
+        )
+
+
+def replace_ungrouped_notes(
+    conn: psycopg.Connection, space_id: str, items: list[UngroupedNote]
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM ungrouped_notes WHERE space_id = %s", (space_id,)
+        )
+        cur.executemany(
+            """
+            INSERT INTO ungrouped_notes (space_id, note_id, title, reason)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (space_id, note_id) DO UPDATE SET
+              title = EXCLUDED.title,
+              reason = EXCLUDED.reason
+            """,
+            [(space_id, u.note_id, u.title, u.reason) for u in items],
+        )
+
+
+def mark_notes_processed(conn: psycopg.Connection, space_id: str) -> int:
+    """Flip notes.processed=true for unprocessed, unarchived rows in the space.
+
+    The `touch_last_modified` trigger now ignores updates where only
+    processing flags change, so this no longer bumps `last_modified_at`.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE notes
+               SET processed = true
+             WHERE space_id = %s
+               AND COALESCE(archived, false) = false
+               AND COALESCE(processed, false) = false
+            """,
+            (space_id,),
+        )
+        return cur.rowcount or 0
 
 
 def replace_diagnostics(conn: psycopg.Connection, diag: DiagnosticResult) -> None:

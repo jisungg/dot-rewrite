@@ -20,6 +20,7 @@ import {
   ArrowLeft,
   Pilcrow,
   Waypoints,
+  Network,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -55,6 +56,7 @@ import Nexus from "@/components/dashboard/home/nexus";
 import Dot from "@/components/dashboard/class/dot";
 import SpaceOutline from "@/components/dashboard/class/space-outline";
 import SpaceTldr from "@/components/dashboard/class/space-tldr";
+import SpaceRelationships from "@/components/dashboard/class/space-relationships";
 import SettingsPage, {
   type SettingsApi,
 } from "@/components/dashboard/settings/settings";
@@ -78,6 +80,7 @@ const spaceNavigationItems: NavigationItem[] = [
   { name: "Dot", icon: BotMessageSquare, id: "dot" },
   { name: "Outline", icon: TextQuote, id: "outline" },
   { name: "TL;DR", icon: ScanText, id: "tl;dr" },
+  { name: "Relationships", icon: Network, id: "relationships" },
 ];
 const homeBottomItems: NavigationItem[] = [
   { name: "Settings", icon: Settings, id: "settings" },
@@ -282,7 +285,9 @@ function DashboardInner() {
           setActiveViewport("settings");
         } else if (["editor", "nexus", "notes"].includes(viewport)) {
           setActiveViewport(viewport as allViewports);
-        } else if (["dot", "outline", "tl;dr"].includes(viewport)) {
+        } else if (
+          ["dot", "outline", "tl;dr", "relationships"].includes(viewport)
+        ) {
           setActiveViewport(viewport as allViewports);
         }
       };
@@ -435,6 +440,16 @@ function DashboardInner() {
     });
   }, []);
 
+  const handleNotesRefetch = useCallback(async () => {
+    if (!user) return;
+    try {
+      const notes = await getNotes(user.id);
+      setAllNotes(notes);
+    } catch (err) {
+      console.error("getNotes refetch:", err);
+    }
+  }, [user]);
+
   const handleNoteToMoveToSpace = useCallback(
     async (noteToMove: Note, newSpace: Space): Promise<Note | null> => {
       if (!noteToMove || !newSpace) return null;
@@ -478,6 +493,8 @@ function DashboardInner() {
         identifier = ` · ${focusedSpace?.code} · outline`;
       } else if (viewport === "tl;dr" && isFocused) {
         identifier = ` · ${focusedSpace?.code} · tl;dr`;
+      } else if (viewport === "relationships" && isFocused) {
+        identifier = ` · ${focusedSpace?.code} · relationships`;
       } else if (viewport === "settings") {
         identifier = " · settings";
       }
@@ -511,6 +528,7 @@ function DashboardInner() {
               allNotes={allNotes}
               userNotes={focusedNotes}
               focusedSpace={focusedSpace}
+              onNoteClick={handleNoteView}
             />
           );
         case "outline":
@@ -529,6 +547,13 @@ function DashboardInner() {
               allNotes={allNotes}
               userNotes={focusedNotes}
               focusedSpace={focusedSpace}
+            />
+          );
+        case "relationships":
+          return (
+            <SpaceRelationships
+              focusedSpace={focusedSpace}
+              userNotes={focusedNotes}
             />
           );
         default:
@@ -582,6 +607,7 @@ function DashboardInner() {
             handleNoteDuplicate={handleNoteDuplicate}
             handleNoteExport={handleNoteExport}
             handleNoteToMoveToSpace={handleNoteToMoveToSpace}
+            onProcessed={handleNotesRefetch}
           />
         );
       case "nexus":

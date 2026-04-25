@@ -15,11 +15,16 @@ import {
   Copy,
   FolderSymlink,
   ChevronLeft,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useClickAway } from "react-use";
+import { toast } from "sonner";
 import type { Note, Space } from "@/data/types";
 import { capitalizeWords, truncate } from "@/lib/string";
+import { runEngineForSpaces } from "@/lib/engine-client";
+import { summarizeSpaceNotesBatch } from "@/lib/summary-client";
 
 type ActionSubmenu = "main" | "moveToSpace";
 
@@ -66,6 +71,7 @@ export default function Notes({
   handleNoteDuplicate,
   handleNoteExport,
   handleNoteToMoveToSpace,
+  onProcessed,
 }: {
   allSpaces: Space[];
   allNotes: Note[];
@@ -79,6 +85,7 @@ export default function Notes({
     noteToMoveToSpace: Note,
     newSpace: Space,
   ) => Promise<Note | null>;
+  onProcessed?: () => Promise<void> | void;
 }) {
   const [notes, setNotes] = useState(allNotes);
   const [filteredAndSortedNotes, setFilteredAndSortedNotes] =
@@ -93,6 +100,11 @@ export default function Notes({
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
   const [activeSubMenu, setActiveSubmenu] = useState<ActionSubmenu>("main");
+  const [isProcessing, setIsProcessing] = useState(false);
+  // note_id -> timestamp when we optimistically marked it processed.
+  // Entries persist for 30s so the sync-from-prop effect won't stomp the
+  // optimistic value back to false if the parent refetch lags.
+  const optimisticProcessedRef = useRef<Map<string, number>>(new Map());
 
   const allTags = [...new Set(notes.flatMap((note) => note.tags))].sort();
 
@@ -130,6 +142,116 @@ export default function Notes({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [activeActionMenu]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const TTL = 30_000;
+    const optimistic = optimisticProcessedRef.current;
+    // Drop stale optimistic markers.
+    for (const [id, ts] of optimistic) {
+      if (now - ts > TTL) optimistic.delete(id);
+    }
+    setNotes(
+      allNotes.map((n) => {
+        const optTs = optimistic.get(n.id);
+        if (optTs && !n.processed) {
+          return { ...n, processed: true };
+        }
+        // Incoming confirms processed=true — optimistic marker can retire.
+        if (optTs && n.processed) {
+          optimistic.delete(n.id);
+        }
+        return n;
+      }),
+    );
+  }, [allNotes]);
+
+  const unprocessedNotes = notes.filter((n) => !n.processed);
+  const unprocessedSpaceIds = Array.from(
+    new Set(unprocessedNotes.map((n) => n.space_id)),
+  );
+
+  const handleProcess = async () => {
+    if (isProcessing || unprocessedSpaceIds.length === 0) return;
+    setIsProcessing(true);
+    const n = unprocessedNotes.length;
+    const toastId = toast.loading(
+      `Analyzing ${n} note${n === 1 ? "" : "s"} across ${
+        unprocessedSpaceIds.length
+      } space${unprocessedSpaceIds.length === 1 ? "" : "s"}…`,
+    );
+    try {
+      const { started, final } = await runEngineForSpaces(unprocessedSpaceIds);
+      if (started.error) {
+        toast.error(`Engine start failed: ${started.error}`, { id: toastId });
+        return;
+      }
+      const failed = final.statuses.filter((s) => s.status === "failed");
+      const done = final.statuses.filter((s) => s.status === "ok");
+      if (failed.length > 0) {
+        const first = failed[0];
+        toast.error(
+          `Processing failed for ${failed.length} space(s): ${
+            first.notes ? truncate(first.notes, { length: 140 }) : first.status
+          }`,
+          { id: toastId },
+        );
+      } else if (!final.allDone) {
+        toast(
+          "Still running in the background — refresh in a minute.",
+          { id: toastId },
+        );
+      } else {
+        toast.success(
+          `Processed ${n} note${n === 1 ? "" : "s"} across ${
+            done.length
+          } space${done.length === 1 ? "" : "s"}`,
+          { id: toastId },
+        );
+      }
+      // Optimistic update — the engine already flipped `processed=true`
+      // for every note in each successfully-processed space, so reflect
+      // that locally right now instead of waiting for the parent refetch
+      // to propagate.
+      if (done.length > 0) {
+        const doneSpaceIds = new Set(done.map((s) => s.space_id));
+        const ts = Date.now();
+        setNotes((prev) =>
+          prev.map((note) => {
+            if (doneSpaceIds.has(note.space_id) && !note.processed) {
+              optimisticProcessedRef.current.set(note.id, ts);
+              return { ...note, processed: true };
+            }
+            return note;
+          }),
+        );
+      }
+      // Fire-and-forget per-note summary batch for processed spaces so the
+      // note-view modal and space TL;DR are pre-populated on first open.
+      if (done.length > 0) {
+        void summarizeSpaceNotesBatch(done.map((s) => s.space_id)).then(
+          (res) => {
+            if (res.ok && res.stats.processed > 0) {
+              toast.success(
+                `Summarized ${res.stats.processed} new note${
+                  res.stats.processed === 1 ? "" : "s"
+                }`,
+              );
+            }
+          },
+        );
+      }
+      await onProcessed?.();
+    } catch (err) {
+      console.error("process error:", err);
+      toast.error(
+        err instanceof Error ? err.message : "Processing failed",
+        { id: toastId },
+      );
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   useEffect(() => {
     let filtered = [...notes];
@@ -324,6 +446,37 @@ export default function Notes({
               ))}
             </div>
           </div>
+
+          <div className="h-4 w-px bg-gray-200 dark:bg-zinc-700" />
+
+          <button
+            type="button"
+            onClick={handleProcess}
+            disabled={isProcessing || unprocessedNotes.length === 0}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-colors ${
+              unprocessedNotes.length > 0 && !isProcessing
+                ? "border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60"
+                : "border-gray-100/80 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-900/60 text-gray-400 dark:text-zinc-500 cursor-not-allowed"
+            }`}
+            title={
+              unprocessedNotes.length === 0
+                ? "All notes processed"
+                : `Run engine on ${unprocessedSpaceIds.length} space(s) with unprocessed notes`
+            }
+          >
+            {isProcessing ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Sparkles className="h-3 w-3" />
+            )}
+            <span>
+              {isProcessing
+                ? "Processing…"
+                : unprocessedNotes.length === 0
+                  ? "All processed"
+                  : `Process ${unprocessedNotes.length} new`}
+            </span>
+          </button>
 
           <div className="h-4 w-px bg-gray-200 dark:bg-zinc-700" />
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { unstable_noStore as noStore } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
 import {
   type Space,
@@ -7,6 +8,18 @@ import {
   type Message,
   type Profile,
   type UserPreferences,
+  type SimEdge,
+  type SpaceRelationships,
+  type TopicClusterRow,
+  type TopicSubclusterRow,
+  type ConfusionPairRow,
+  type ConceptHubRow,
+  type NoteDiagnosticRow,
+  type StudyStateEdgeRow,
+  type SemanticEdgeRow,
+  type SemanticClusterRow,
+  type TopicHierarchyPathRow,
+  type UngroupedNoteRow,
   DEFAULT_PREFERENCES,
 } from "@/data/types";
 import { revalidatePath } from "next/cache";
@@ -232,6 +245,10 @@ export async function saveNoteAndConnectToSpace(noteData: {
       content: noteData.content,
       tags: noteData.tags,
       space_id: noteData.space_id,
+      // Content changed — engine outputs are now stale. The next Process
+      // click (or analyze_space.py run) will re-analyse and flip this
+      // back to true via mark_notes_processed().
+      processed: false,
       last_modified_at: new Date().toISOString(),
     });
 
@@ -342,6 +359,11 @@ export async function moveNoteToSpace(
 }
 
 export async function getNotes(user_id: string): Promise<Note[]> {
+  // Opt out of Next's fetch cache. Otherwise the Supabase REST GET can be
+  // served from a stale response across the refetch that runs right after
+  // the engine flips `processed` in Postgres — that's why the Notes tab
+  // needed a full page reload to show new processed state.
+  noStore();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("notes")
@@ -466,6 +488,200 @@ export async function updateProfilePreferences(
   }
 
   return hydrateProfile(data as Record<string, unknown>);
+}
+
+// ============================================================
+// Engine analysis reads
+// ============================================================
+
+export async function getUnprocessedCountsBySpace(
+  user_id: string,
+): Promise<Record<string, number>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("notes")
+    .select("space_id")
+    .eq("user_id", user_id)
+    .eq("archived", false)
+    .eq("processed", false);
+  if (error) {
+    console.error("getUnprocessedCountsBySpace error:", error.message);
+    return {};
+  }
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    const sid = (row as { space_id: string }).space_id;
+    counts[sid] = (counts[sid] ?? 0) + 1;
+  }
+  return counts;
+}
+
+export async function fetchSemanticEdges(
+  spaceIds: string[],
+): Promise<SemanticEdgeRow[]> {
+  if (spaceIds.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("note_semantic_edges")
+    .select("space_id, src_note_id, dst_note_id, similarity, mutual")
+    .in("space_id", spaceIds);
+  if (error) {
+    console.error("fetchSemanticEdges error:", error.message);
+    return [];
+  }
+  return (data ?? []) as SemanticEdgeRow[];
+}
+
+const SEM_CLUSTER_COLUMNS =
+  "id, space_id, stable_id, label, keywords, note_ids, cohesion, parent_topic, hierarchy_path, evidence_terms, excluded_terms, secondary_topics, llm_confidence, source";
+
+export async function fetchSemanticClusters(
+  spaceIds: string[],
+): Promise<SemanticClusterRow[]> {
+  if (spaceIds.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("semantic_topic_clusters")
+    .select(SEM_CLUSTER_COLUMNS)
+    .in("space_id", spaceIds);
+  if (error) {
+    console.error("fetchSemanticClusters error:", error.message);
+    return [];
+  }
+  return (data ?? []) as SemanticClusterRow[];
+}
+
+export async function fetchSimEdges(spaceIds: string[]): Promise<SimEdge[]> {
+  if (spaceIds.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("note_sim_edges")
+    .select(
+      "space_id, src_note_id, dst_note_id, weight, confidence, views_supporting",
+    )
+    .in("space_id", spaceIds);
+  if (error) {
+    console.error("fetchSimEdges error:", error.message);
+    return [];
+  }
+  return (data ?? []) as SimEdge[];
+}
+
+export async function fetchTopicClusters(
+  spaceIds: string[],
+): Promise<TopicClusterRow[]> {
+  if (spaceIds.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("topic_clusters")
+    .select(
+      "id, space_id, stable_id, label, keywords, note_ids, centroid_terms, structural_certainty",
+    )
+    .in("space_id", spaceIds);
+  if (error) {
+    console.error("fetchTopicClusters error:", error.message);
+    return [];
+  }
+  return (data ?? []) as TopicClusterRow[];
+}
+
+export async function fetchSpaceRelationships(
+  spaceId: string,
+): Promise<SpaceRelationships> {
+  const supabase = await createClient();
+
+  const [
+    semanticClusters,
+    semanticEdges,
+    hierarchy,
+    ungrouped,
+    topics,
+    subs,
+    confusion,
+    hubs,
+    diagnostics,
+    prereqs,
+  ] = await Promise.all([
+      supabase
+        .from("semantic_topic_clusters")
+        .select(SEM_CLUSTER_COLUMNS)
+        .eq("space_id", spaceId)
+        .order("cohesion", { ascending: false }),
+      supabase
+        .from("note_semantic_edges")
+        .select("space_id, src_note_id, dst_note_id, similarity, mutual")
+        .eq("space_id", spaceId)
+        .order("similarity", { ascending: false }),
+      supabase
+        .from("topic_hierarchy_paths")
+        .select("space_id, path")
+        .eq("space_id", spaceId),
+      supabase
+        .from("ungrouped_notes")
+        .select("space_id, note_id, title, reason")
+        .eq("space_id", spaceId),
+      supabase
+        .from("topic_clusters")
+        .select(
+          "id, space_id, stable_id, label, keywords, note_ids, centroid_terms, structural_certainty",
+        )
+        .eq("space_id", spaceId),
+      supabase
+        .from("topic_subclusters")
+        .select("id, space_id, parent_id, label, keywords, note_ids")
+        .eq("space_id", spaceId),
+      supabase
+        .from("confusion_pairs")
+        .select(
+          "space_id, topic_a, topic_b, score, closeness, separability, interpretive_confidence, shared_core_terms, discriminators_a, discriminators_b",
+        )
+        .eq("space_id", spaceId)
+        .order("score", { ascending: false }),
+      supabase
+        .from("concept_hubs")
+        .select("space_id, term, degree, note_ids")
+        .eq("space_id", spaceId)
+        .order("degree", { ascending: false })
+        .limit(40),
+      supabase
+        .from("note_diagnostics")
+        .select(
+          "space_id, note_id, prereq_gap, integration, is_isolated, is_foundational, is_bridge",
+        )
+        .eq("space_id", spaceId),
+      supabase
+        .from("study_state_edges")
+        .select("space_id, src_node_id, dst_node_id, kind, weight")
+        .eq("space_id", spaceId)
+        .eq("kind", "prerequisite"),
+    ]);
+
+  const warn = (name: string, err: { message: string } | null) => {
+    if (err) console.error(`fetchSpaceRelationships ${name}:`, err.message);
+  };
+  warn("semanticClusters", semanticClusters.error);
+  warn("semanticEdges", semanticEdges.error);
+  warn("hierarchy", hierarchy.error);
+  warn("ungrouped", ungrouped.error);
+  warn("topics", topics.error);
+  warn("subclusters", subs.error);
+  warn("confusion", confusion.error);
+  warn("hubs", hubs.error);
+  warn("diagnostics", diagnostics.error);
+  warn("prereqs", prereqs.error);
+
+  return {
+    semanticClusters: (semanticClusters.data ?? []) as SemanticClusterRow[],
+    semanticEdges: (semanticEdges.data ?? []) as SemanticEdgeRow[],
+    hierarchyPaths: (hierarchy.data ?? []) as TopicHierarchyPathRow[],
+    ungrouped: (ungrouped.data ?? []) as UngroupedNoteRow[],
+    topics: (topics.data ?? []) as TopicClusterRow[],
+    subclusters: (subs.data ?? []) as TopicSubclusterRow[],
+    confusion: (confusion.data ?? []) as ConfusionPairRow[],
+    hubs: (hubs.data ?? []) as ConceptHubRow[],
+    diagnostics: (diagnostics.data ?? []) as NoteDiagnosticRow[],
+    prereqEdges: (prereqs.data ?? []) as StudyStateEdgeRow[],
+  };
 }
 
 export async function fetchProfileByEmail(

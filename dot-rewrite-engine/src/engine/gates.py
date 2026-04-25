@@ -27,10 +27,10 @@ from .models import (
 class GatePolicy:
     name: str = "golden_v1"
 
-    # related notes
-    related_min_raw: float = 0.18
-    related_min_calibrated: float = 0.45
-    related_min_confidence: float = 0.20
+    # related notes — tightened for precision (was 0.18/0.45/0.20).
+    related_min_raw: float = 0.22
+    related_min_calibrated: float = 0.50
+    related_min_confidence: float = 0.25
     related_min_views: int = 2
     related_role_filter_fragment: bool = True   # drop edges where either side is FRAGMENT
 

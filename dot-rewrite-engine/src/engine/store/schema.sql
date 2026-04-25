@@ -196,6 +196,85 @@ CREATE TABLE IF NOT EXISTS run_metrics (
     budget_degraded_stages text[] NOT NULL DEFAULT '{}'
 );
 
+-- ============================================================
+-- Semantic-embedding layer: primary clustering signal.
+-- ============================================================
+
+-- One row per note. Vector stored as real[] to avoid requiring the
+-- pgvector extension. Dimension is whatever the model emits (384 for
+-- all-MiniLM-L6-v2).
+CREATE TABLE IF NOT EXISTS note_embeddings (
+    space_id     uuid NOT NULL,
+    note_id      uuid NOT NULL,
+    model        text NOT NULL,
+    dim          int  NOT NULL,
+    vector       real[] NOT NULL,
+    content_hash text NOT NULL,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (space_id, note_id)
+);
+CREATE INDEX IF NOT EXISTS note_embeddings_note_idx ON note_embeddings(note_id);
+
+-- Cosine-similarity edges from the semantic graph (undirected, src < dst).
+CREATE TABLE IF NOT EXISTS note_semantic_edges (
+    space_id     uuid NOT NULL,
+    src_note_id  uuid NOT NULL,
+    dst_note_id  uuid NOT NULL,
+    similarity   real NOT NULL,
+    mutual       boolean NOT NULL DEFAULT false,
+    PRIMARY KEY (space_id, src_note_id, dst_note_id)
+);
+CREATE INDEX IF NOT EXISTS note_semantic_edges_src_idx
+    ON note_semantic_edges(space_id, src_note_id);
+CREATE INDEX IF NOT EXISTS note_semantic_edges_dst_idx
+    ON note_semantic_edges(space_id, dst_note_id);
+
+-- Leiden communities over the semantic graph.
+CREATE TABLE IF NOT EXISTS semantic_topic_clusters (
+    id               uuid PRIMARY KEY,
+    space_id         uuid NOT NULL,
+    stable_id        uuid,
+    label            text,
+    keywords         text[] NOT NULL DEFAULT '{}',
+    note_ids         uuid[] NOT NULL DEFAULT '{}',
+    centroid         real[] NOT NULL DEFAULT '{}',
+    cohesion         real NOT NULL DEFAULT 0,
+    parent_topic     text,
+    hierarchy_path   text[] NOT NULL DEFAULT '{}',
+    evidence_terms   text[] NOT NULL DEFAULT '{}',
+    excluded_terms   text[] NOT NULL DEFAULT '{}',
+    secondary_topics text[] NOT NULL DEFAULT '{}',
+    llm_confidence   real NOT NULL DEFAULT 0,
+    source           text NOT NULL DEFAULT 'semantic'
+);
+
+ALTER TABLE semantic_topic_clusters
+    ADD COLUMN IF NOT EXISTS parent_topic     text,
+    ADD COLUMN IF NOT EXISTS hierarchy_path   text[] NOT NULL DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS evidence_terms   text[] NOT NULL DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS excluded_terms   text[] NOT NULL DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS secondary_topics text[] NOT NULL DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS llm_confidence   real NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS source           text NOT NULL DEFAULT 'semantic';
+
+CREATE TABLE IF NOT EXISTS topic_hierarchy_paths (
+    space_id uuid NOT NULL,
+    path     text[] NOT NULL,
+    PRIMARY KEY (space_id, path)
+);
+
+CREATE TABLE IF NOT EXISTS ungrouped_notes (
+    space_id uuid NOT NULL,
+    note_id  uuid NOT NULL,
+    title    text NOT NULL DEFAULT '',
+    reason   text NOT NULL DEFAULT '',
+    PRIMARY KEY (space_id, note_id)
+);
+CREATE INDEX IF NOT EXISTS semantic_topic_clusters_space_idx
+    ON semantic_topic_clusters(space_id);
+CREATE INDEX IF NOT EXISTS semantic_topic_clusters_stable_idx
+    ON semantic_topic_clusters(space_id, stable_id);
+
 CREATE TABLE IF NOT EXISTS space_profiles (
     space_id    uuid PRIMARY KEY,
     kind        text NOT NULL,
@@ -203,3 +282,60 @@ CREATE TABLE IF NOT EXISTS space_profiles (
     evidence    jsonb NOT NULL DEFAULT '{}'::jsonb,
     updated_at  timestamptz NOT NULL DEFAULT now()
 );
+
+-- ============================================================
+-- Web read access: authenticated role reads rows scoped to spaces it owns.
+-- RLS joins back to public.spaces(user_id) which already has its own RLS.
+-- Engine writes via service-role DB URL, so RLS does not block the engine.
+-- ============================================================
+
+DO $$
+DECLARE
+    tbl text;
+BEGIN
+    FOREACH tbl IN ARRAY ARRAY[
+        'note_sim_edges',
+        'study_state_edges',
+        'topic_clusters',
+        'topic_subclusters',
+        'concept_hubs',
+        'topic_stats',
+        'confusion_pairs',
+        'note_diagnostics',
+        'analysis_runs',
+        'space_profiles',
+        'ranking_explanations',
+        'note_terms',
+        'note_embeddings',
+        'note_semantic_edges',
+        'semantic_topic_clusters',
+        'topic_hierarchy_paths',
+        'ungrouped_notes'
+    ]
+    LOOP
+        EXECUTE format('GRANT SELECT ON public.%I TO authenticated', tbl);
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', tbl);
+        EXECUTE format('DROP POLICY IF EXISTS %I_owner_select ON public.%I', tbl, tbl);
+        EXECUTE format(
+            'CREATE POLICY %I_owner_select ON public.%I FOR SELECT TO authenticated '
+            'USING (EXISTS (SELECT 1 FROM public.spaces s '
+            '               WHERE s.id = public.%I.space_id '
+            '                 AND s.user_id = auth.uid()))',
+            tbl, tbl, tbl
+        );
+    END LOOP;
+END $$;
+
+-- run_metrics has only run_id; scope via analysis_runs.space_id.
+GRANT SELECT ON public.run_metrics TO authenticated;
+ALTER TABLE public.run_metrics ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS run_metrics_owner_select ON public.run_metrics;
+CREATE POLICY run_metrics_owner_select ON public.run_metrics
+    FOR SELECT TO authenticated
+    USING (EXISTS (
+        SELECT 1
+          FROM public.analysis_runs r
+          JOIN public.spaces s ON s.id = r.space_id
+         WHERE r.id = run_metrics.run_id
+           AND s.user_id = auth.uid()
+    ));
