@@ -122,3 +122,5 @@ graphify-out/cost.json
 graphify-out/graph.json
 graphify-out/manifest.json
 graphify-out/.graphify_python
+
+docs/
