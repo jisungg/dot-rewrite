@@ -329,23 +329,31 @@ def replace_ungrouped_notes(
         )
 
 
-def mark_notes_processed(conn: psycopg.Connection, space_id: str) -> int:
+def mark_notes_processed(
+    conn: psycopg.Connection,
+    space_id: str,
+    started_at=None,
+) -> int:
     """Flip notes.processed=true for unprocessed, unarchived rows in the space.
 
-    The `touch_last_modified` trigger now ignores updates where only
-    processing flags change, so this no longer bumps `last_modified_at`.
+    Race guard (`started_at`): if a user edited a note AFTER the engine
+    started, `last_modified_at` advanced past `started_at`. We only mark
+    rows whose last edit was at or before the engine started, so a
+    user's mid-run edit doesn't get falsely flagged as processed.
     """
+    sql = (
+        "UPDATE notes "
+        "   SET processed = true "
+        " WHERE space_id = %s "
+        "   AND COALESCE(archived, false) = false "
+        "   AND COALESCE(processed, false) = false"
+    )
+    args: list = [space_id]
+    if started_at is not None:
+        sql += " AND last_modified_at <= %s"
+        args.append(started_at)
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            UPDATE notes
-               SET processed = true
-             WHERE space_id = %s
-               AND COALESCE(archived, false) = false
-               AND COALESCE(processed, false) = false
-            """,
-            (space_id,),
-        )
+        cur.execute(sql, tuple(args))
         return cur.rowcount or 0
 
 

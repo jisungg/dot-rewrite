@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "motion/react";
 import {
   Accordion,
   AccordionContent,
@@ -43,40 +42,33 @@ const faqs = [
 
 export default function PricingFaq() {
   return (
-    <section className="py-24">
-      <div className="container">
-        <div className="max-w-3xl mx-auto">
-          <motion.div
-            className="text-center mb-16"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.5 }}
-          >
-            <h2 className="text-3xl font-medium tracking-tight text-gray-900">
+    <section className="w-full py-24">
+      <div className="container mx-auto px-4">
+        <div className="mx-auto w-full max-w-3xl">
+          <div className="text-center mb-12 fade-in-fast">
+            <h2 className="text-3xl font-medium tracking-tight text-zinc-900">
               Frequently asked questions
             </h2>
-          </motion.div>
+          </div>
 
-          <motion.div
-            className="bg-white rounded-xl shadow-sm overflow-hidden"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            viewport={{ once: true }}
-          >
+          <div className="rounded-xl border border-zinc-200 bg-white shadow-sm">
             <Accordion type="single" collapsible className="w-full">
               {faqs.map((faq, index) => (
-                <AccordionItem key={faq.question} value={`item-${index}`}>
-                  <AccordionTrigger className="px-6 py-4 text-left font-medium text-gray-900 hover:text-[#0061ff] hover:no-underline">
+                <AccordionItem
+                  key={faq.question}
+                  value={`item-${index}`}
+                  className="px-6"
+                >
+                  <AccordionTrigger className="py-4 text-left font-medium text-zinc-900 hover:text-[#0061ff] hover:no-underline">
                     {faq.question}
                   </AccordionTrigger>
-                  <AccordionContent className="px-6 pb-4 text-gray-600">
+                  <AccordionContent className="pb-4 text-zinc-600 leading-relaxed">
                     {faq.answer}
                   </AccordionContent>
                 </AccordionItem>
               ))}
             </Accordion>
-          </motion.div>
+          </div>
         </div>
       </div>
     </section>

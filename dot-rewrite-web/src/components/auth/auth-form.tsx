@@ -1,7 +1,6 @@
 "use client";
 
 import { type ReactNode, useEffect, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
 import { AlertCircle, Check, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,105 +125,87 @@ export function AuthForm({
   };
 
   return (
-    <motion.form
-      onSubmit={handleSubmit}
-      className="space-y-4 p-6"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ delay: 0.4 }}
-    >
-      {fields.map((field, index) => (
-        <motion.div
-          key={field.id}
-          className="space-y-2"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 + index * 0.1 }}
-        >
+    <form onSubmit={handleSubmit} className="space-y-4 p-6 fade-in-fast">
+      {fields.map((field) => (
+        <div key={field.id} className="space-y-2">
           <Label
             htmlFor={field.id}
-            className="text-sm font-medium text-slate-700 flex justify-between"
+            className="text-sm font-medium flex justify-between"
+            style={{ color: "#334155" }}
           >
             <span>
               {field.label}{" "}
-              {field.required && <span className="text-red-500">*</span>}
-            </span>
-            <AnimatePresence>
-              {errors[field.id] && touched[field.id] && (
-                <motion.span
-                  className="text-xs text-red-500 flex items-center"
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                >
-                  <X className="h-3 w-3 mr-1" />
-                  {errors[field.id]}
-                </motion.span>
+              {field.required && (
+                <span style={{ color: "#ef4444" }}>*</span>
               )}
-            </AnimatePresence>
+            </span>
+            {errors[field.id] && touched[field.id] && (
+              <span
+                className="text-xs flex items-center fade-in-fast"
+                style={{ color: "#ef4444" }}
+              >
+                <X className="h-3 w-3 mr-1" />
+                {errors[field.id]}
+              </span>
+            )}
           </Label>
           <div className="relative">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500">
+            <div
+              className="absolute left-3 top-1/2 -translate-y-1/2"
+              style={{ color: "#3b82f6" }}
+            >
               {field.icon}
             </div>
             <Input
               id={field.id}
               type={field.type}
               placeholder={field.placeholder}
-              className={`pl-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 rounded-lg ${
+              className={`pl-10 rounded-lg ${
                 errors[field.id] && touched[field.id]
                   ? "border-red-300 focus:border-red-500 focus:ring-red-500"
-                  : ""
+                  : "border-slate-200 focus:border-blue-500 focus:ring-blue-500"
               }`}
               value={formData[field.id] ?? ""}
               onChange={handleChange}
               onBlur={handleBlur}
             />
           </div>
-        </motion.div>
+        </div>
       ))}
 
-      <AnimatePresence>
-        {formError && (
-          <motion.div
-            className="bg-red-50 text-red-600 p-3 rounded-lg flex items-center gap-2 text-sm"
-            initial={{ opacity: 0, y: -10, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: "auto" }}
-            exit={{ opacity: 0, y: -10, height: 0 }}
+      {formError && (
+        <div
+          className="p-3 rounded-lg flex items-center gap-2 text-sm fade-in-fast"
+          style={{ backgroundColor: "#fef2f2", color: "#dc2626" }}
+        >
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span>{formError}</span>
+          <button
+            type="button"
+            className="ml-auto"
+            style={{ color: "#f87171" }}
+            onClick={() => setFormError("")}
           >
-            <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <span>{formError}</span>
-            <button
-              type="button"
-              className="ml-auto text-red-400 hover:text-red-600"
-              onClick={() => setFormError("")}
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </motion.div>
-        )}
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
-        {success && (
-          <motion.div
-            className="bg-green-50 text-green-600 p-3 rounded-lg flex items-center gap-2 text-sm"
-            initial={{ opacity: 0, y: -10, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: "auto" }}
-            exit={{ opacity: 0, y: -10, height: 0 }}
-          >
-            <Check className="h-4 w-4 flex-shrink-0" />
-            <span>{success}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {success && (
+        <div
+          className="p-3 rounded-lg flex items-center gap-2 text-sm fade-in-fast"
+          style={{ backgroundColor: "#f0fdf4", color: "#16a34a" }}
+        >
+          <Check className="h-4 w-4 flex-shrink-0" />
+          <span>{success}</span>
+        </div>
+      )}
 
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1 }}
-      >
+      <div>
         <Button
           type="submit"
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2.5"
+          className="w-full text-white rounded-lg py-2.5"
+          style={{ backgroundColor: "#0061ff" }}
           disabled={isSubmitting}
         >
           {isSubmitting ? (
@@ -238,11 +219,14 @@ export function AuthForm({
         </Button>
 
         {footerText && (
-          <div className="mt-4 text-center text-sm text-slate-600">
+          <div
+            className="mt-4 text-center text-sm"
+            style={{ color: "#475569" }}
+          >
             {footerText}
           </div>
         )}
-      </motion.div>
-    </motion.form>
+      </div>
+    </form>
   );
 }

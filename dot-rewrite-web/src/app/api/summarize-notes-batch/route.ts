@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { createClient } from "@/utils/supabase/server";
 import type { Note, NoteCache, OutlineHeading } from "@/data/types";
 import { backendName, completeJson } from "@/lib/llm-backend";
+import { GROUNDING_RULES } from "@/lib/llm-grounding";
+import { rateLimit, maybeSweep } from "@/lib/api/rate-limit";
 
 // Batch per-note summarizer. Fires once per space right after the engine
 // finishes an analyze run, so by the time the user clicks a note it's
@@ -19,10 +21,12 @@ export const dynamic = "force-dynamic";
 const MAX_CONTENT_CHARS = 8000;
 const CONCURRENCY = 4;
 
-const SYSTEM_PROMPT = `You summarize a single markdown note into a compact TL;DR plus a short outline.
+const SYSTEM_PROMPT = `${GROUNDING_RULES}
+
+You summarize a single markdown note into a compact TL;DR plus a short outline. Every claim must come from the note's own words.
 
 Rules:
-- TL;DR: exactly one or two sentences. Plain prose. Concrete. No preamble, no "This note…", no markdown, no bullets.
+- TL;DR: exactly one or two sentences. Plain prose. Concrete. No preamble, no "This note…", no markdown, no bullets. Do not insert external definitions or context.
 - Outline: the note's heading structure, in document order. For each heading output {level, text} with level 1-6. Do NOT invent headings that aren't in the note. If the note has no headings, return an empty array.
 - Ignore markdown formatting, LaTeX commands, and code boilerplate. Focus on subject-matter meaning.
 - If the note is empty, trivial, or unintelligible, return a summary of "" and an empty outline — never guess.`;
@@ -114,6 +118,15 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (authErr || !user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
+
+  maybeSweep();
+  const rl = rateLimit(user.id, "llm_heavy");
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "rate_limited", detail: `Try again in ${rl.retryAfter}s.` },
+      { status: 429, headers: { "retry-after": String(rl.retryAfter) } },
+    );
   }
 
   let query = supabase

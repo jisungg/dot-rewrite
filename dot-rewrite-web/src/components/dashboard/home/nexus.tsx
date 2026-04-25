@@ -7,13 +7,18 @@ import {
   fetchTopicClusters,
   fetchSemanticEdges,
   fetchSemanticClusters,
+  fetchPrereqEdgesForSpaces,
+  fetchConfusionPairsForSpaces,
 } from "@/utils/supabase/queries";
 import type {
   SimEdge,
   TopicClusterRow,
   SemanticEdgeRow,
   SemanticClusterRow,
+  StudyStateEdgeRow,
+  ConfusionPairRow,
 } from "@/data/types";
+import { useEngineUpdates } from "@/lib/engine-events";
 import {
   Plus,
   Minus,
@@ -45,8 +50,11 @@ interface NoteNode extends d3.SimulationNodeDatum {
   tags: string[];
 }
 
+type LinkKind = "semantic" | "fused" | "tag" | "prereq" | "confusion";
+
 interface LinkDatum extends d3.SimulationLinkDatum<NoteNode> {
   value: number;
+  kind: LinkKind;
 }
 
 export default function Nexus({
@@ -87,6 +95,17 @@ export default function Nexus({
   const [semanticClusters, setSemanticClusters] = useState<
     SemanticClusterRow[]
   >([]);
+  const [prereqEdges, setPrereqEdges] = useState<StudyStateEdgeRow[]>([]);
+  const [confusionPairs, setConfusionPairs] = useState<ConfusionPairRow[]>([]);
+  const [showSemantic, setShowSemantic] = useState(true);
+  const [showPrereqs, setShowPrereqs] = useState(true);
+  const [showConfusion, setShowConfusion] = useState(true);
+  const [reloadTick, setReloadTick] = useState(0);
+
+  // Engine-completion hook: any analyze run finishes anywhere in the
+  // user's account → re-pull the engine-owned tables so Nexus reflects
+  // new clusters / edges / diagnostics without a hard refresh.
+  useEngineUpdates(() => setReloadTick((t) => t + 1));
 
   useEffect(() => {
     let cancelled = false;
@@ -100,17 +119,21 @@ export default function Nexus({
     }
     (async () => {
       try {
-        const [edges, tps, sEdges, sClusters] = await Promise.all([
+        const [edges, tps, sEdges, sClusters, pEdges, cPairs] = await Promise.all([
           fetchSimEdges(spaceIds),
           fetchTopicClusters(spaceIds),
           fetchSemanticEdges(spaceIds),
           fetchSemanticClusters(spaceIds),
+          fetchPrereqEdgesForSpaces(spaceIds),
+          fetchConfusionPairsForSpaces(spaceIds),
         ]);
         if (!cancelled) {
           setSimEdges(edges);
           setTopics(tps);
           setSemanticEdges(sEdges);
           setSemanticClusters(sClusters);
+          setPrereqEdges(pEdges);
+          setConfusionPairs(cPairs);
         }
       } catch (err) {
         console.error("nexus engine fetch:", err);
@@ -119,7 +142,7 @@ export default function Nexus({
     return () => {
       cancelled = true;
     };
-  }, [allSpaces]);
+  }, [allSpaces, reloadTick]);
 
   // Prefer semantic clusters for coloring; group by the top-level parent
   // topic (e.g. "Mathematics") so a whole subject shares a color — falls
@@ -351,24 +374,29 @@ export default function Nexus({
       (e) => visibleIds.has(e.src_note_id) && visibleIds.has(e.dst_note_id),
     );
 
-    if (visibleSemantic.length > 0) {
+    if (showSemantic && visibleSemantic.length > 0) {
       // PRIMARY: semantic (embedding cosine) edges.
       for (const e of visibleSemantic) {
         links.push({
           source: e.src_note_id,
           target: e.dst_note_id,
           value: Math.max(0.1, e.similarity),
+          kind: "semantic",
         });
       }
-    } else if (visibleFused.length > 0) {
+    } else if (showSemantic && visibleFused.length > 0) {
       // Secondary: fused algorithmic edges.
       for (const e of visibleFused) {
         links.push({
           source: e.src_note_id,
           target: e.dst_note_id,
           value: Math.max(0.08, e.weight),
+          kind: "fused",
         });
       }
+    } else if (!showSemantic) {
+      // Similarity layer hidden — fall through to relationship layers
+      // alone (prereqs / confusion / tag fallback added below).
     } else {
       // Fallback: placeholder structural links when engine has not run yet.
       Object.values(notesBySpace).forEach((spaceNotes) => {
@@ -379,6 +407,7 @@ export default function Nexus({
               source: spaceNotes[i].id,
               target: spaceNotes[nextIndex].id,
               value: 1,
+              kind: "tag",
             });
           }
         }
@@ -401,10 +430,44 @@ export default function Nexus({
             const key = a < b ? `${a}|${b}` : `${b}|${a}`;
             if (seenPair.has(key)) continue;
             seenPair.add(key);
-            links.push({ source: a, target: b, value: 0.5 });
+            links.push({ source: a, target: b, value: 0.5, kind: "tag" });
           }
         }
       });
+    }
+
+    // Layered relationships from the engine — overlaid on top of similarity.
+    if (showPrereqs) {
+      for (const e of prereqEdges) {
+        if (!visibleIds.has(e.src_node_id) || !visibleIds.has(e.dst_node_id))
+          continue;
+        links.push({
+          source: e.src_node_id,
+          target: e.dst_node_id,
+          value: Math.max(0.18, e.weight ?? 0.4),
+          kind: "prereq",
+        });
+      }
+    }
+    if (showConfusion && confusionPairs.length > 0 && semanticClusters.length > 0) {
+      // Confusion is topic-level — surface it as dashed connections
+      // between the central note of each topic in a confusion pair.
+      const topicById = new Map<string, SemanticClusterRow>();
+      for (const c of semanticClusters) topicById.set(c.id, c);
+      for (const cp of confusionPairs) {
+        const a = topicById.get(cp.topic_a);
+        const b = topicById.get(cp.topic_b);
+        if (!a || !b) continue;
+        const aRep = a.note_ids.find((id) => visibleIds.has(id));
+        const bRep = b.note_ids.find((id) => visibleIds.has(id));
+        if (!aRep || !bRep || aRep === bRep) continue;
+        links.push({
+          source: aRep,
+          target: bRep,
+          value: Math.max(0.18, Math.min(1, cp.score ?? 0.4)),
+          kind: "confusion",
+        });
+      }
     }
 
     // Faster-settling simulation — alphaDecay ~2× default so the graph
@@ -464,22 +527,56 @@ export default function Nexus({
       if (v >= 0.4) return "medium";
       return "weak";
     };
-    const linkStroke = (v: number) => {
+    const simStroke = (v: number) => {
       const t = linkTier(v);
       if (t === "strong") return "#2563eb"; // blue-600
       if (t === "medium") return "#60a5fa"; // blue-400
       return "#cbd5e1"; // slate-300
     };
+    const strokeFor = (d: LinkDatum) => {
+      if (d.kind === "prereq") return "#f97316"; // orange-500 — directional dependency
+      if (d.kind === "confusion") return "#dc2626"; // red-600 — confusable topics
+      if (d.kind === "tag") return "#a3a3a3";
+      return simStroke(d.value);
+    };
+    const dashFor = (d: LinkDatum) =>
+      d.kind === "confusion" ? "4 3" : null;
+
+    // Arrowhead marker for prereq edges (directional).
+    const defs = svg.append("defs");
+    defs
+      .append("marker")
+      .attr("id", "arrow-prereq")
+      .attr("viewBox", "0 -5 10 10")
+      .attr("refX", 14)
+      .attr("refY", 0)
+      .attr("markerWidth", 6)
+      .attr("markerHeight", 6)
+      .attr("orient", "auto")
+      .append("path")
+      .attr("d", "M0,-5L10,0L0,5")
+      .attr("fill", "#f97316");
 
     const link = g
       .append("g")
       .selectAll<SVGLineElement, LinkDatum>(".link")
       .data(links)
       .join("line")
-      .attr("class", "link")
-      .attr("stroke", (d) => linkStroke(d.value))
-      .attr("stroke-opacity", (d) => Math.min(0.9, 0.35 + d.value * 0.6))
+      .attr("class", (d) => `link link-${d.kind}`)
+      .attr("stroke", (d) => strokeFor(d))
+      .attr("stroke-opacity", (d) =>
+        Math.min(
+          0.95,
+          (d.kind === "prereq" || d.kind === "confusion" ? 0.6 : 0.35) +
+            d.value * 0.5,
+        ),
+      )
       .attr("stroke-width", (d) => Math.max(0.8, Math.sqrt(d.value * 4)))
+      .attr("stroke-dasharray", (d) => dashFor(d) ?? "")
+      .attr(
+        "marker-end",
+        (d) => (d.kind === "prereq" ? "url(#arrow-prereq)" : null),
+      )
       .style("cursor", "pointer");
 
     link
@@ -487,6 +584,12 @@ export default function Nexus({
       .text((d) => {
         const src = typeof d.source === "object" ? d.source.title : d.source;
         const dst = typeof d.target === "object" ? d.target.title : d.target;
+        if (d.kind === "prereq") {
+          return `${src} → ${dst}\ndependency (prerequisite)`;
+        }
+        if (d.kind === "confusion") {
+          return `${src} ↔ ${dst}\nconfusable topics — review side by side`;
+        }
         const tier = linkTier(d.value);
         return `${src} ↔ ${dst}\nrelation: ${tier} (${(d.value * 100).toFixed(0)}%)`;
       });
@@ -759,6 +862,11 @@ export default function Nexus({
     semanticEdges,
     semanticClusters,
     topics,
+    prereqEdges,
+    confusionPairs,
+    showSemantic,
+    showPrereqs,
+    showConfusion,
     clusterByNoteId,
   ]);
 
@@ -979,34 +1087,55 @@ export default function Nexus({
                   Relations
                 </div>
                 <div className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                  {semanticClusters.length > 0
-                    ? `${semanticClusters.length} semantic cluster${
-                        semanticClusters.length === 1 ? "" : "s"
-                      } · ${semanticEdges.length} embedding edge${
-                        semanticEdges.length === 1 ? "" : "s"
-                      }.`
-                    : topics.length > 0
-                      ? `${topics.length} algorithmic topic${
-                          topics.length === 1 ? "" : "s"
-                        } · ${simEdges.length} fused edge${
-                          simEdges.length === 1 ? "" : "s"
-                        }.`
-                      : "Engine not run yet. Showing shared-tag + space groupings."}
+                  {semanticClusters.length === 0 && topics.length === 0
+                    ? "Process notes to surface semantic relationships."
+                    : "Color shows topic groupings. Toggle layers below."}
                 </div>
-                <div className="mt-2 flex items-center gap-3 text-[9px] text-zinc-500 dark:text-zinc-400">
-                  <span className="flex items-center gap-1">
-                    <span className="h-0.5 w-4 rounded-full bg-blue-600" />
-                    strong
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-0.5 w-4 rounded-full bg-blue-400" />
-                    medium
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-0.5 w-4 rounded-full bg-slate-300" />
-                    weak
-                  </span>
+                <div className="mt-2 grid grid-cols-1 gap-1 text-[10px] text-zinc-600 dark:text-zinc-300">
+                  <LayerToggle
+                    label="Similarity"
+                    color="#2563eb"
+                    enabled={showSemantic}
+                    count={
+                      semanticEdges.length > 0
+                        ? semanticEdges.length
+                        : simEdges.length
+                    }
+                    onToggle={() => setShowSemantic((v) => !v)}
+                  />
+                  <LayerToggle
+                    label="Dependencies"
+                    color="#f97316"
+                    arrow
+                    enabled={showPrereqs}
+                    count={prereqEdges.length}
+                    onToggle={() => setShowPrereqs((v) => !v)}
+                  />
+                  <LayerToggle
+                    label="Confusion"
+                    color="#dc2626"
+                    dashed
+                    enabled={showConfusion}
+                    count={confusionPairs.length}
+                    onToggle={() => setShowConfusion((v) => !v)}
+                  />
                 </div>
+                {showSemantic && (
+                  <div className="mt-1.5 flex items-center gap-3 text-[9px] text-zinc-500 dark:text-zinc-400">
+                    <span className="flex items-center gap-1">
+                      <span className="h-0.5 w-4 rounded-full bg-blue-600" />
+                      strong
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-0.5 w-4 rounded-full bg-blue-400" />
+                      medium
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-0.5 w-4 rounded-full bg-slate-300" />
+                      weak
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1137,5 +1266,59 @@ export default function Nexus({
         )}
       </div>
     </div>
+  );
+}
+
+function LayerToggle({
+  label,
+  color,
+  enabled,
+  count,
+  onToggle,
+  dashed = false,
+  arrow = false,
+}: {
+  label: string;
+  color: string;
+  enabled: boolean;
+  count: number;
+  onToggle: () => void;
+  dashed?: boolean;
+  arrow?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`flex items-center gap-2 px-1.5 py-1 rounded transition-colors hover:bg-gray-50 dark:hover:bg-zinc-800/50 text-left ${
+        enabled
+          ? "text-zinc-700 dark:text-zinc-200"
+          : "text-zinc-400 dark:text-zinc-500"
+      }`}
+      title={enabled ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+      aria-pressed={enabled}
+    >
+      <svg width="22" height="6" className="flex-shrink-0">
+        <line
+          x1="0"
+          y1="3"
+          x2={arrow ? "16" : "22"}
+          y2="3"
+          stroke={enabled ? color : "#cbd5e1"}
+          strokeWidth="1.6"
+          strokeDasharray={dashed ? "3 2" : ""}
+        />
+        {arrow && (
+          <polygon
+            points="16,0 22,3 16,6"
+            fill={enabled ? color : "#cbd5e1"}
+          />
+        )}
+      </svg>
+      <span className="flex-1 truncate">{label}</span>
+      <span className="text-[9px] tabular-nums text-zinc-400 dark:text-zinc-500">
+        {count}
+      </span>
+    </button>
   );
 }

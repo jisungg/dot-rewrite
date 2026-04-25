@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { createClient } from "@/utils/supabase/server";
+import { rateLimit, maybeSweep } from "@/lib/api/rate-limit";
 
 // Local-dev helper: kick off the Python engine per space owned by the caller,
 // then return immediately. Runs go to a detached child so the HTTP request
@@ -79,6 +80,15 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (authErr || !user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
+
+  maybeSweep();
+  const rl = rateLimit(user.id, "engine_run");
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "rate_limited", detail: `Try again in ${rl.retryAfter}s.` },
+      { status: 429, headers: { "retry-after": String(rl.retryAfter) } },
+    );
   }
 
   const { data: owned, error: ownErr } = await supabase

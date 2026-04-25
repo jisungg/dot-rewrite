@@ -118,9 +118,34 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Premium typography defaults: alternates + tabular numerals. */
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1,
+      "ss01" 1,
+      "cv11" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     transition:
       background-color 500ms ease-in-out,
       color 500ms ease-in-out;
+  }
+  /* Soft focus ring (a11y, but tuned away from the harsh native blue). */
+  :focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--background),
+      0 0 0 4px oklch(0.708 0 0 / 50%);
+    border-radius: 6px;
+    transition: box-shadow 120ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  /* Tabular numerals everywhere counters / scores / timers live. */
+  .tabular-nums,
+  time,
+  code,
+  kbd {
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -167,6 +192,125 @@
       background-position: 200% 0;
     }
   }
+
+  /* Premium micro-interactions. Use sparingly — apply via class. */
+  .lift {
+    transition:
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .lift:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 1px 1px rgba(0, 0, 0, 0.04),
+      0 4px 14px rgba(0, 0, 0, 0.06);
+  }
+  .lift:active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  /* Press feel for buttons that don't need a full lift. */
+  .press {
+    transition: transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .press:active {
+    transform: scale(0.97);
+  }
+
+  /* Subtle gradient surface for hero / call-to-action cards. */
+  .surface-premium {
+    background:
+      radial-gradient(1200px 380px at 0% -10%, oklch(0.97 0.02 260) 0%, transparent 60%),
+      radial-gradient(1000px 420px at 100% 0%, oklch(0.97 0.02 30) 0%, transparent 55%),
+      var(--card);
+  }
+  .dark .surface-premium {
+    background:
+      radial-gradient(1200px 380px at 0% -10%, oklch(0.32 0.05 260) 0%, transparent 60%),
+      radial-gradient(1000px 420px at 100% 0%, oklch(0.32 0.05 30) 0%, transparent 55%),
+      var(--card);
+  }
+
+  /* Fade-in on first paint, used for tab-switch entries. */
+  .fade-in-fast {
+    animation: fade-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Premium reusable surfaces — same idiom as the landing's DemoFrame. */
+  .premium-card {
+    background: white;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.75rem;
+    box-shadow:
+      0 1px 1px rgba(15, 23, 42, 0.04),
+      0 6px 22px -10px rgba(0, 97, 255, 0.12);
+    transition:
+      box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .premium-card:hover {
+    box-shadow:
+      0 1px 1px rgba(15, 23, 42, 0.04),
+      0 12px 36px -12px rgba(0, 97, 255, 0.18);
+  }
+
+  /* Premium button — used as a base class on primary CTAs. */
+  .btn-premium {
+    background: linear-gradient(180deg, #1572ff 0%, #0061ff 100%);
+    color: white;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    font-weight: 500;
+    font-size: 0.8125rem;
+    letter-spacing: -0.005em;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.3) inset,
+      0 0 0 1px rgba(0, 97, 255, 0.6),
+      0 6px 16px -8px rgba(0, 97, 255, 0.6);
+    transition:
+      box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .btn-premium:hover {
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.35) inset,
+      0 0 0 1px rgba(0, 97, 255, 0.8),
+      0 10px 22px -8px rgba(0, 97, 255, 0.7);
+  }
+  .btn-premium:active {
+    transform: scale(0.98);
+  }
+
+  /* Premium animated gradient stripe — the bottom-of-frame signature. */
+  .premium-stripe {
+    height: 2px;
+    background-image: linear-gradient(
+      to right,
+      #0061ff,
+      #60efff,
+      #0061ff
+    );
+    background-size: 200% 100%;
+    animation: gradient-x 6s ease infinite;
+  }
+
+  /* Crisp serif accents for marquee headlines. */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.012em;
+  }
 }
 
 @keyframes gradient {
@@ -193,3 +337,63 @@
 .animate-gradient-x {
     animation: gradient-x 3s ease infinite;
   }
+
+@keyframes accordion-down {
+  from { height: 0; }
+  to   { height: var(--radix-accordion-content-height); }
+}
+
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to   { height: 0; }
+}
+
+.animate-accordion-down {
+  animation: accordion-down 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.animate-accordion-up {
+  animation: accordion-up 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ===================================================================
+ * Premium scroll + scrollbar polish.
+ * Kept OUT of `@layer base` because Tailwind v4 / lightningcss can panic
+ * when raw element selectors and nested @media rules sit inside the
+ * base layer. Top-level CSS always works.
+ * =================================================================== */
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 96px;
+  overscroll-behavior-y: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgba(15, 23, 42, 0.18);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(15, 23, 42, 0.32);
+}
+::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.32);
+}

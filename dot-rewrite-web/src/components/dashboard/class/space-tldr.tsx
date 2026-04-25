@@ -15,6 +15,7 @@ import type { Note, Space } from "@/data/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { fetchSpaceSummary } from "@/lib/summary-client";
+import { useEngineUpdates } from "@/lib/engine-events";
 
 function stripMd(text: string): string {
   return text
@@ -73,6 +74,13 @@ export default function SpaceTldr({
   const [state, setState] = useState<SpaceSummaryState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Auto-refresh after engine processing finishes for this space.
+  useEngineUpdates((d) => {
+    if (!d.space_id || d.space_id === focusedSpace.id) {
+      setState(null);
+      setError(null);
+    }
+  });
 
   // Seed immediately from any cached summary on the space row.
   useEffect(() => {
@@ -225,21 +233,6 @@ export default function SpaceTldr({
                       <div className="text-[10px] uppercase tracking-wide font-medium text-zinc-400 dark:text-zinc-500">
                         Space Summary
                       </div>
-                      {state && (
-                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                          {state.fallback
-                            ? "local fallback"
-                            : state.cached
-                              ? "cached"
-                              : "fresh"}
-                          {state.updated_at && (
-                            <>
-                              {" · "}
-                              {new Date(state.updated_at).toLocaleDateString()}
-                            </>
-                          )}
-                        </span>
-                      )}
                       {loading && (
                         <Loader2 className="h-3 w-3 animate-spin text-zinc-400 dark:text-zinc-500" />
                       )}
@@ -288,9 +281,9 @@ export default function SpaceTldr({
                       {error}
                     </div>
                   )}
-                  {state?.fallback && state.detail && (
+                  {state?.fallback && (
                     <div className="text-[11px] text-amber-700 dark:text-amber-400 mb-2">
-                      LLM call failed: {state.detail}
+                      Couldn&apos;t generate a fresh summary right now.
                     </div>
                   )}
                   {loading && !spaceSummary ? (

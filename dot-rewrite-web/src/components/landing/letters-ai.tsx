@@ -6,375 +6,330 @@ import {
   BookOpen,
   Calculator,
   Code,
-  FlaskRoundIcon as Flask,
+  ChevronDown,
+  FlaskRound as Flask,
   Globe,
+  Send,
+  Library,
+  Timer,
 } from "lucide-react";
+
+import { DemoFrame } from "./demo-frame";
 
 type LetterAI = {
   letter: string;
-  name: string;
   subject: string;
   icon: ReactNode;
-  color: string;
-  bgColor: string;
-  lightColor: string;
+  hex: string;
+  bgTint: string;
+  borderTint: string;
   trainedOn: string[];
+  example: string;
+  response: Array<
+    | { kind: "p"; html: string }
+    | { kind: "math"; body: string }
+  >;
 };
 
 const letters: LetterAI[] = [
   {
     letter: "M",
-    name: "M",
     subject: "Mathematics",
-    icon: <Calculator className="h-5 w-5" />,
-    color: "text-blue-600",
-    bgColor: "bg-blue-600",
-    lightColor: "bg-blue-50",
+    icon: <Calculator className="h-3.5 w-3.5" />,
+    hex: "#0061ff",
+    bgTint: "bg-blue-50",
+    borderTint: "border-blue-200",
     trainedOn: [
-      "American Mathematical Society (AMS) journals",
-      "Princeton University Press mathematics textbooks",
-      "MIT OpenCourseWare mathematics curriculum",
-      "arXiv preprints in mathematics",
-      "Cambridge Mathematical Journal",
-      "International Congress of Mathematicians proceedings",
+      "American Mathematical Society journals",
+      "Princeton University Press textbooks",
+      "MIT OpenCourseWare math curriculum",
+      "arXiv mathematics preprints",
+    ],
+    example: "Why does the chain rule generalize to higher dimensions?",
+    response: [
+      {
+        kind: "p",
+        html:
+          'For $f: \\mathbb{R}^n \\to \\mathbb{R}^m$ and $g: \\mathbb{R}^m \\to \\mathbb{R}^p$, the chain rule lifts to a matrix product of Jacobians:',
+      },
+      { kind: "math", body: "D(g ∘ f)(x) = Dg(f(x)) · Df(x)" },
+      {
+        kind: "p",
+        html:
+          'Each entry of the composite Jacobian is a sum over partial derivatives — a direct generalization of the 1-D product.',
+      },
     ],
   },
   {
     letter: "S",
-    name: "S",
     subject: "Sciences",
-    icon: <Flask className="h-5 w-5" />,
-    color: "text-green-600",
-    bgColor: "bg-green-600",
-    lightColor: "bg-green-50",
+    icon: <Flask className="h-3.5 w-3.5" />,
+    hex: "#10b981",
+    bgTint: "bg-emerald-50",
+    borderTint: "border-emerald-200",
     trainedOn: [
-      "Nature and Science journal publications",
-      "AAAS (American Association for the Advancement of Science) resources",
-      "National Academy of Sciences research papers",
-      "Peer-reviewed studies from PubMed and ScienceDirect",
-      "Cell Press journals",
+      "Nature & Science journal publications",
+      "AAAS research resources",
+      "PubMed peer-reviewed studies",
       "Royal Society scientific archives",
+    ],
+    example: "What's the actual mechanism behind RNA splicing?",
+    response: [
+      {
+        kind: "p",
+        html:
+          'The <strong>spliceosome</strong> — a ribonucleoprotein complex — recognizes introns by their 5′ splice site, branch point, and 3′ splice site, then catalyzes two transesterification reactions:',
+      },
+      {
+        kind: "math",
+        body: "5′-exon — intron — 3′-exon → 5′-exon-3′-exon + lariat",
+      },
+      {
+        kind: "p",
+        html:
+          'Result: a continuous mature mRNA, ready for export and translation.',
+      },
     ],
   },
   {
     letter: "C",
-    name: "C",
     subject: "Comp. Sci.",
-    icon: <Code className="h-5 w-5" />,
-    color: "text-purple-600",
-    bgColor: "bg-purple-600",
-    lightColor: "bg-purple-50",
+    icon: <Code className="h-3.5 w-3.5" />,
+    hex: "#a855f7",
+    bgTint: "bg-purple-50",
+    borderTint: "border-purple-200",
     trainedOn: [
-      "ACM (Association for Computing Machinery) digital library",
+      "ACM digital library",
       "IEEE Computer Society publications",
-      "Official language documentation and specifications",
-      "GitHub repositories with MIT and Apache licenses",
-      "Stanford and Berkeley CS course materials",
-      "NIST computer security publications",
+      "Stanford & Berkeley CS course materials",
       "Computer Science arXiv preprints",
+    ],
+    example: "Walk me through how a Bloom filter trades accuracy for memory.",
+    response: [
+      {
+        kind: "p",
+        html:
+          'A Bloom filter stores set membership in a fixed-size bit array using $k$ independent hash functions. Inserts flip $k$ bits; queries check whether all $k$ bits are set.',
+      },
+      { kind: "math", body: "P(false positive) ≈ (1 − e^(−kn/m))^k" },
+      {
+        kind: "p",
+        html:
+          'You pick $k$ and $m$ for your target false-positive rate. There are no false negatives — only "definitely not present" or "probably present".',
+      },
     ],
   },
   {
     letter: "P",
-    name: "P",
     subject: "Philosophy",
-    icon: <BookOpen className="h-5 w-5" />,
-    color: "text-amber-600",
-    bgColor: "bg-amber-600",
-    lightColor: "bg-amber-50",
+    icon: <BookOpen className="h-3.5 w-3.5" />,
+    hex: "#f59e0b",
+    bgTint: "bg-amber-50",
+    borderTint: "border-amber-200",
     trainedOn: [
       "Stanford Encyclopedia of Philosophy",
-      "Oxford University Press philosophy publications",
+      "Oxford University Press publications",
       "JSTOR philosophy collections",
-      "Project Gutenberg philosophical works",
-      "Cambridge University philosophical archives",
-      "Journal of Philosophy",
-      "Philosophical Review archives",
+      "Cambridge philosophical archives",
+    ],
+    example: "Distinguish Kant's categorical imperative from utilitarian ethics.",
+    response: [
+      {
+        kind: "p",
+        html:
+          'Kant grounds morality in <strong>universalizable maxims</strong>: act only on a rule you could will to be universal law. Consequences are irrelevant; the rational form of the will is what counts.',
+      },
+      {
+        kind: "p",
+        html:
+          'Utilitarianism instead measures right action by aggregate welfare — Bentham\'s "greatest good for the greatest number." Same act, opposite test: form vs. outcome.',
+      },
     ],
   },
   {
     letter: "H",
-    name: "H",
     subject: "History",
-    icon: <Globe className="h-5 w-5" />,
-    color: "text-red-600",
-    bgColor: "bg-red-600",
-    lightColor: "bg-red-50",
+    icon: <Globe className="h-3.5 w-3.5" />,
+    hex: "#ef4444",
+    bgTint: "bg-rose-50",
+    borderTint: "border-rose-200",
     trainedOn: [
+      "Cambridge & Oxford historical archives",
       "American Historical Review",
-      "Journal of Modern History",
-      "Oxford University Press historical texts",
-      "Library of Congress digital archives",
-      "National Archives historical documents",
-      "Cambridge Historical Journal",
-      "Historical primary source collections",
+      "Library of Congress digital collections",
+      "Historiographical journal corpus",
+    ],
+    example: "What's the historiographical debate over the causes of WWI?",
+    response: [
+      {
+        kind: "p",
+        html:
+          'Three schools dominate. <strong>Fischer</strong>: German aggression as planned policy. <strong>Sleepwalkers</strong> (Clark): a continent-wide failure of strategic imagination. <strong>Long-fuse structuralists</strong>: alliance systems and arms races made war inevitable once Sarajevo fired the spark.',
+      },
+      {
+        kind: "p",
+        html:
+          'Modern consensus: contingency mattered more than any single actor — but Berlin\'s blank check to Vienna closes most of the alternative paths.',
+      },
     ],
   },
 ];
 
-const examples: Record<number, ReactNode> = {
-  0: (
-    <div className="bg-white rounded-lg border border-blue-100 p-4 shadow-sm">
-      <div className="text-sm text-blue-800">
-        <div className="font-medium mb-2">
-          According to Princeton University&apos;s &quot;Principles of
-          Mathematical Analysis&quot; (Rudin, 2006):
-        </div>
-        <div className="math-handwriting text-lg mb-3">
-          &quot;The Riemann Hypothesis states that all non-trivial zeros of the
-          zeta function have real part equal to 1/2.&quot;
-        </div>
-        <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
-          Your calculus class might cover basic integration, but Letter M
-          connects you to advanced number theory and unsolved mathematical
-          problems that can inspire graduate-level research directions.
-        </div>
-      </div>
-    </div>
-  ),
-  1: (
-    <div className="bg-white rounded-lg border border-green-100 p-4 shadow-sm">
-      <div className="text-sm text-green-800">
-        <div className="font-medium mb-2">
-          From Nature journal (Vol. 598, October 2021):
-        </div>
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-bold">
-            H₂O
-          </div>
-          <div className="flex-1">
-            &quot;Recent studies on water molecule behavior under quantum
-            conditions reveal unexpected quantum tunneling effects at
-            temperatures above 20K.&quot;
-          </div>
-        </div>
-        <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
-          Beyond your chemistry textbook&apos;s basics, Letter S introduces
-          cutting-edge research that bridges undergraduate concepts with
-          doctoral-level scientific exploration, helping you see potential
-          career paths in research science.
-        </div>
-      </div>
-    </div>
-  ),
-  2: (
-    <div className="bg-white rounded-lg border border-purple-100 p-4 shadow-sm">
-      <div className="text-sm text-purple-800">
-        <div className="font-medium mb-2">
-          From Stanford&apos;s CS curriculum (COMPSCI 161: Design and Analysis
-          of Algorithms):
-        </div>
-        <div className="bg-zinc-900 rounded p-3 font-mono text-xs overflow-hidden mb-3">
-          <pre className="text-purple-300">
-            <span className="text-blue-300">
-              {"// Randomized QuickSort implementation with Lomuto partition"}
-            </span>
-            <br />
-            <span className="text-blue-300">function</span>{" "}
-            <span className="text-yellow-300">quickSort</span>(arr, low = 0,
-            high = arr.length - 1) {"{"}
-            <br />
-            &nbsp;&nbsp;<span className="text-blue-300">if</span> (low &lt;
-            high) {"{"}
-            <br />
-            &nbsp;&nbsp;&nbsp;&nbsp;
-            <span className="text-green-300">
-              {"// Choose random pivot to avoid worst-case O(n²)"}
-            </span>
-            <br />
-            &nbsp;&nbsp;&nbsp;&nbsp;<span className="text-blue-300">
-              const
-            </span>{" "}
-            pivotIdx = Math.
-            <span className="text-yellow-300">floor</span>(Math.
-            <span className="text-yellow-300">random</span>() * (high - low + 1)) +
-            low;
-            <br />
-            &nbsp;&nbsp;&nbsp;&nbsp;[arr[pivotIdx], arr[high]] = [arr[high],
-            arr[pivotIdx]];
-            <br />
-            &nbsp;&nbsp;&nbsp;&nbsp;<span className="text-blue-300">
-              const
-            </span>{" "}
-            p = <span className="text-yellow-300">partition</span>(arr, low,
-            high);
-            <br />
-            &nbsp;&nbsp;&nbsp;&nbsp;
-            <span className="text-yellow-300">quickSort</span>(arr, low, p - 1);
-            <br />
-            &nbsp;&nbsp;&nbsp;&nbsp;
-            <span className="text-yellow-300">quickSort</span>(arr, p + 1, high);
-            <br />
-            &nbsp;&nbsp;{"}"}
-            <br />
-            &nbsp;&nbsp;<span className="text-blue-300">return</span> arr;
-            <br />
-            {"}"}
-          </pre>
-        </div>
-        <div className="text-xs text-purple-600 bg-purple-50 p-2 rounded">
-          While your programming class might teach basic sorting, Letter C
-          explains advanced algorithm optimizations and theoretical complexity
-          analysis used in tech interviews at top companies and graduate-level
-          computer science research.
-        </div>
-      </div>
-    </div>
-  ),
-  3: (
-    <div className="bg-white rounded-lg border border-amber-100 p-4 shadow-sm">
-      <div className="text-sm text-amber-800">
-        <div className="font-medium mb-2">
-          From Stanford Encyclopedia of Philosophy (2023 edition):
-        </div>
-        <div className="italic mb-3 border-l-2 border-amber-200 pl-3">
-          &quot;Kant&apos;s Categorical Imperative represents a deontological
-          ethical framework that judges the morality of an action based on
-          rules rather than consequences. This stands in contrast to
-          utilitarian approaches that focus on outcomes.&quot;
-        </div>
-        <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
-          Beyond introductory ethics discussions, Letter P helps you explore
-          how philosophical frameworks influence modern policy debates,
-          bioethics decisions, and AI governance—connecting classroom theory to
-          real-world ethical dilemmas.
-        </div>
-      </div>
-    </div>
-  ),
-  4: (
-    <div className="bg-white rounded-lg border border-red-100 p-4 shadow-sm">
-      <div className="text-sm text-red-800">
-        <div className="font-medium mb-2">
-          From Oxford University&apos;s &quot;The Oxford History of the
-          American People&quot; (Morison, 1965):
-        </div>
-        <div className="mb-3">
-          <div className="flex justify-between text-xs mb-1">
-            <span className="font-medium">Primary Source Analysis:</span>
-            <span>The Federalist Papers, 1787-1788</span>
-          </div>
-          <div className="border-l-2 border-red-200 pl-3 italic">
-            &quot;Madison&apos;s arguments in Federalist No. 10 reveal
-            sophisticated understanding of faction dynamics that transcends the
-            immediate political context, establishing principles of
-            representative democracy still debated by constitutional scholars
-            today.&quot;
-          </div>
-        </div>
-        <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
-          While your history class might cover basic events and timelines,
-          Letter H provides historiographical analysis and primary source
-          interpretation methods used by professional historians to understand
-          how historical narratives shape current geopolitical realities.
-        </div>
-      </div>
-    </div>
-  ),
-};
+function inline(html: string): string {
+  return html
+    .replace(/<strong>/g, '<strong class="font-medium text-slate-900">')
+    .replace(
+      /\$([^$]+)\$/g,
+      '<span class="font-mono text-[0.9em] text-slate-800">$1</span>',
+    );
+}
 
 export default function LettersAI() {
-  const [activeAI, setActiveAI] = useState(0);
-  const active = letters[activeAI]!;
+  const [activeLetter, setActiveLetter] = useState(0);
+  const active = letters[activeLetter]!;
 
   return (
-    <div className="w-full max-w-5xl mx-auto">
-      <div className="mb-12 relative">
-        <div className="flex justify-center mb-1">
-          <div className="flex justify-between space-x-8 border-b border-gray-100 w-full max-w-2xl">
-            {letters.map((letter, index) => (
-              <motion.button
-                key={letter.subject}
-                className={`flex-1 pb-4 pt-2 px-2 relative flex flex-col items-center transition-colors ${
-                  activeAI === index
-                    ? letter.color
-                    : "text-gray-400 hover:text-zinc-600"
-                }`}
-                onClick={() => setActiveAI(index)}
-                whileHover={{ y: -2 }}
-                whileTap={{ scale: 0.98 }}
+    <div className="space-y-5">
+      <div className="mx-auto w-full max-w-5xl px-4">
+        <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
+          {letters.map((l, i) => (
+            <button
+              key={l.letter}
+              onClick={() => setActiveLetter(i)}
+              className={`group relative flex flex-col items-center gap-1.5 rounded-xl border px-3 py-2 transition-all ${
+                i === activeLetter
+                  ? `${l.borderTint} ${l.bgTint}`
+                  : "border-slate-200 bg-white hover:border-slate-300"
+              }`}
+              style={
+                i === activeLetter
+                  ? { boxShadow: `0 6px 22px -10px ${l.hex}66` }
+                  : undefined
+              }
+            >
+              <span
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-white text-sm font-medium shadow-sm"
+                style={{ backgroundColor: l.hex }}
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <div
-                    className={`flex items-center justify-center w-7 h-7 rounded-full ${
-                      activeAI === index ? letter.lightColor : "bg-gray-100"
-                    } ${activeAI === index ? letter.color : "text-gray-500"}`}
-                  >
-                    {letter.icon}
-                  </div>
-                  <span className="font-medium">{letter.name}</span>
-                </div>
-                <span className="text-xs opacity-70">{letter.subject}</span>
-
-                {activeAI === index && (
-                  <motion.div
-                    className={`absolute bottom-0 left-0 right-0 h-0.5 ${letter.bgColor}`}
-                    layoutId="activeIndicator"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.2 }}
-                  />
-                )}
-              </motion.button>
-            ))}
-          </div>
+                {l.letter}
+              </span>
+              <span
+                className={`text-[10px] tracking-wide ${
+                  i === activeLetter ? "font-medium text-slate-800" : "text-slate-500"
+                }`}
+              >
+                {l.subject}
+              </span>
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-400 overflow-hidden">
+      <DemoFrame
+        crumbs={[
+          { color: active.hex, text: `Letter ${active.letter}` },
+          { text: active.subject.toLowerCase(), muted: true },
+        ]}
+        rightChip={
+          <>
+            <Timer className="h-3 w-3" />
+            <span className="font-mono">~6s avg</span>
+          </>
+        }
+      >
         <AnimatePresence mode="wait">
           <motion.div
-            key={activeAI}
-            initial={{ opacity: 0, y: 10 }}
+            key={active.letter}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="p-8 h-[460px] overflow-y-auto"
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            className="grid grid-cols-1 md:grid-cols-[0.9fr_1.1fr] divide-y md:divide-y-0 md:divide-x divide-slate-100"
           >
-            <div className="flex items-center gap-4 mb-6">
-              <div
-                className={`flex items-center justify-center w-12 h-12 rounded-full text-xl font-bold ${active.lightColor} ${active.color}`}
-              >
-                {active.letter}
+            <div className="p-4 sm:p-5 space-y-3 bg-[#FAFAFA]/50">
+              <div className="flex items-center gap-3">
+                <span
+                  className="flex h-12 w-12 items-center justify-center rounded-xl text-white text-xl font-medium shadow-sm"
+                  style={{ backgroundColor: active.hex }}
+                >
+                  {active.letter}
+                </span>
+                <div>
+                  <div className="text-sm font-medium text-slate-900">
+                    Letter {active.letter}
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    {active.subject}
+                  </div>
+                </div>
               </div>
               <div>
-                <h3 className="text-xl font-medium text-zinc-900">
-                  {active.name}
-                </h3>
-                <p className="text-zinc-600 text-sm">{active.subject}</p>
+                <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1.5 flex items-center gap-1">
+                  <Library className="h-3 w-3" />
+                  Trained on
+                </div>
+                <ul className="space-y-1.5">
+                  {active.trainedOn.map((src) => (
+                    <li
+                      key={src}
+                      className="text-[11.5px] text-slate-700 leading-relaxed flex gap-2"
+                    >
+                      <span
+                        className="mt-1 h-1 w-1 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: active.hex }}
+                      />
+                      {src}
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
 
-            <div className="mb-6">{examples[activeAI]}</div>
+            <div className="p-4 sm:p-5 space-y-3 bg-white">
+              <div className="text-[10px] uppercase tracking-wide font-medium text-slate-500">
+                Ask the {active.subject} Letter
+              </div>
 
-            <div className="pt-4 border-t border-gray-100">
-              <h4 className="text-sm font-medium text-zinc-900 mb-3">
-                Academic sources include:
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {active.trainedOn.slice(0, 4).map((source) => (
-                  <span
-                    key={source}
-                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
-                  >
-                    {source}
-                  </span>
-                ))}
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
-                  +{active.trainedOn.length - 4} more sources
+              <div className="rounded-md border border-slate-200 bg-slate-50/40 p-2.5 text-[12px] text-slate-800 flex items-center justify-between gap-2">
+                <span className="truncate">{active.example}</span>
+                <span
+                  className="inline-flex items-center gap-1 rounded text-[10px] text-white px-2 py-0.5 flex-shrink-0"
+                  style={{ backgroundColor: active.hex }}
+                >
+                  <Send className="h-2.5 w-2.5" />
+                  Ask
                 </span>
+              </div>
+
+              <div className="rounded-md border border-slate-200 p-3 space-y-2.5 text-[12.5px] leading-relaxed text-slate-700 min-h-[180px]">
+                {active.response.map((r, i) =>
+                  r.kind === "math" ? (
+                    <div
+                      key={i}
+                      className="rounded-md bg-slate-50 border border-slate-100 px-3 py-2 font-mono text-[12px] text-slate-800"
+                    >
+                      {r.body}
+                    </div>
+                  ) : (
+                    <p
+                      key={i}
+                      dangerouslySetInnerHTML={{ __html: inline(r.html) }}
+                    />
+                  ),
+                )}
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                <span className="inline-flex items-center gap-1">
+                  <ChevronDown className="h-3 w-3" />
+                  More follow-ups
+                </span>
+                <span>Public academia · not your notes</span>
               </div>
             </div>
           </motion.div>
         </AnimatePresence>
-      </div>
-
-      <div className="mt-4 text-center max-w-xl mx-auto">
-        <p className="text-gray-500 text-sm mb-4">
-          Unlike Dot which learns from your specific class materials, Letters
-          connect your studies to broader academic knowledge.
-        </p>
-      </div>
+      </DemoFrame>
     </div>
   );
 }

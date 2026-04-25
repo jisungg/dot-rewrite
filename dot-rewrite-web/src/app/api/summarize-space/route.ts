@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { createClient } from "@/utils/supabase/server";
 import type { Note, NoteCache, Space, SpaceSummaryCache } from "@/data/types";
 import { backendName, completeJson } from "@/lib/llm-backend";
+import { GROUNDING_RULES } from "@/lib/llm-grounding";
+import { rateLimit, maybeSweep } from "@/lib/api/rate-limit";
 
 // Per-space TL;DR. One or two concrete sentences describing what lives in
 // the space, reusing already-computed per-note summaries when present so
@@ -21,12 +23,14 @@ export const dynamic = "force-dynamic";
 const MAX_NOTES_FOR_PROMPT = 60;
 const MAX_EXCERPT_CHARS = 240;
 
-const SYSTEM_PROMPT = `You write a one-to-two sentence TL;DR for a collection of study notes in a single subject-matter "space".
+const SYSTEM_PROMPT = `${GROUNDING_RULES}
+
+You write a one-to-two sentence TL;DR for a collection of study notes in a single subject-matter "space".
 
 Rules:
 - Exactly 1 or 2 sentences. No bullet points, no markdown, no preamble ("This space…" / "The notes cover…" / "In summary…").
-- Concrete and specific: name the actual topics, concepts, or themes that show up across the notes. Prefer standard academic terminology.
-- Do not invent topics that are not supported by the titles or summaries you were given.
+- Concrete and specific: name the actual topics, concepts, or themes that show up across the notes you were given. Use the user's own terminology where they used it; do not substitute fancier or more textbook-style names that the notes themselves did not use.
+- Do not invent topics that are not supported by the titles or summaries you were given. Do not extrapolate from what the space "probably" contains.
 - If the input is empty or too vague, return an empty string.`;
 
 const OUTPUT_SCHEMA = {
@@ -122,6 +126,15 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (authErr || !user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
+
+  maybeSweep();
+  const rl = rateLimit(user.id, "llm_default");
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "rate_limited", detail: `Try again in ${rl.retryAfter}s.` },
+      { status: 429, headers: { "retry-after": String(rl.retryAfter) } },
+    );
   }
 
   // Read core space fields first. We intentionally do NOT include

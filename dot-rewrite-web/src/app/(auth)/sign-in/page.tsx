@@ -32,8 +32,13 @@ const fields: FormField[] = [
 export default function SignInPage() {
   return (
     <AuthLayout
-      title="Welcome back"
-      subtitle="Sign in to your account to continue"
+      eyebrow="Sign in"
+      title={
+        <>
+          Welcome <span style={{ color: "#0061ff" }}>back</span>.
+        </>
+      }
+      subtitle="Sign in to your account to continue."
     >
       <AuthForm
         fields={fields}
@@ -52,7 +57,7 @@ export default function SignInPage() {
                 />
                 <label
                   htmlFor="remember"
-                  className="text-sm text-gray-600 dark:text-gray-400"
+                  className="text-sm text-gray-600"
                 >
                   Remember me
                 </label>

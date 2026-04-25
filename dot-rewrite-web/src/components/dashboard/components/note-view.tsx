@@ -47,6 +47,23 @@ function localOutline(content: string): OutlineHeading[] {
   return headings;
 }
 
+// Cache rows are jsonb — defend against malformed shapes (bad shape, wrong
+// types, level out of range, missing text) before we try to render.
+function sanitizeOutline(value: unknown): OutlineHeading[] {
+  if (!Array.isArray(value)) return [];
+  const out: OutlineHeading[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const lvl = Number((item as { level?: unknown }).level);
+    const txt = (item as { text?: unknown }).text;
+    if (!Number.isInteger(lvl) || lvl < 1 || lvl > 6) continue;
+    if (typeof txt !== "string" || txt.length === 0) continue;
+    out.push({ level: lvl, text: txt });
+    if (out.length >= 200) break; // hard cap on absurd payloads
+  }
+  return out;
+}
+
 type SummaryState = {
   summary: string;
   outline: OutlineHeading[];
@@ -89,7 +106,7 @@ export default function NoteView({
     ) {
       setState({
         summary: cache.summary,
-        outline: cache.outline ?? [],
+        outline: sanitizeOutline(cache.outline),
         cached: true,
         fallback: false,
         updated_at: cache.updated_at ?? null,
@@ -106,7 +123,7 @@ export default function NoteView({
         const res = await fetchNoteSummary(note.id, { force });
         setState({
           summary: res.summary,
-          outline: res.outline,
+          outline: sanitizeOutline(res.outline),
           cached: res.cached,
           fallback: Boolean(res.fallback),
           updated_at: res.updated_at ?? null,
@@ -231,23 +248,14 @@ export default function NoteView({
                       </>
                     )}
                     {!loading && state && (
-                      <>
-                        <span>
-                          {state.fallback
-                            ? "local fallback"
-                            : state.cached
-                              ? "cached"
-                              : "fresh"}
-                        </span>
-                        <button
-                          onClick={() => load(true)}
-                          className="hover:text-gray-700 dark:hover:text-zinc-200 flex items-center gap-1"
-                          aria-label="Regenerate"
-                        >
-                          <RefreshCw className="h-3 w-3" />
-                          Regenerate
-                        </button>
-                      </>
+                      <button
+                        onClick={() => load(true)}
+                        className="hover:text-gray-700 dark:hover:text-zinc-200 flex items-center gap-1 press"
+                        aria-label="Regenerate"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Regenerate
+                      </button>
                     )}
                   </div>
                 )}
@@ -327,13 +335,8 @@ export default function NoteView({
                     </div>
                   ) : state?.summary ? (
                     <div className="rounded-lg border border-gray-100/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 glow-border">
-                      <div className="text-[10px] uppercase tracking-wide font-medium text-gray-400 dark:text-zinc-500 mb-2 flex items-center gap-2">
-                        <span>Summary</span>
-                        {state.updated_at && (
-                          <span className="text-gray-300 dark:text-zinc-600 normal-case tracking-normal font-normal">
-                            · {new Date(state.updated_at).toLocaleDateString()}
-                          </span>
-                        )}
+                      <div className="text-[10px] uppercase tracking-wide font-medium text-gray-400 dark:text-zinc-500 mb-2">
+                        Summary
                       </div>
                       <p className="text-sm leading-relaxed text-gray-700 dark:text-zinc-300 whitespace-pre-wrap break-words">
                         {state.summary}

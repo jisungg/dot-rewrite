@@ -8,6 +8,8 @@ import {
   Star,
   GitBranch,
   CircleDashed,
+  CircleCheck,
+  CircleAlert,
   Hash,
   Loader2,
   Sparkles,
@@ -25,6 +27,7 @@ import type {
   UngroupedNoteRow,
 } from "@/data/types";
 import { fetchSpaceRelationships } from "@/utils/supabase/queries";
+import { useEngineUpdates } from "@/lib/engine-events";
 
 type TreeNode = {
   name: string;
@@ -135,6 +138,12 @@ export default function SpaceRelationships({
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(
     null,
   );
+  const [reloadTick, setReloadTick] = useState(0);
+  useEngineUpdates((d) => {
+    if (!d.space_id || d.space_id === focusedSpace.id) {
+      setReloadTick((t) => t + 1);
+    }
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -160,7 +169,7 @@ export default function SpaceRelationships({
     return () => {
       cancelled = true;
     };
-  }, [focusedSpace.id]);
+  }, [focusedSpace.id, reloadTick]);
 
   const noteById = useMemo(() => {
     const m = new Map<string, Note>();
@@ -514,74 +523,84 @@ function ClusterDetail({
 }) {
   return (
     <div className="flex flex-col h-full">
-      <div className="mb-2">
+      <div className="mb-3">
         <div className="text-[10px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
           {cluster.hierarchy_path.slice(0, -1).join(" / ") ||
             cluster.parent_topic ||
             "Topic"}
         </div>
-        <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-          {cluster.label ?? "Untitled topic"}
-        </div>
-        <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-3">
-          <span>{cluster.note_ids.length} notes</span>
-          <span>coh {(cluster.cohesion * 100).toFixed(0)}%</span>
-          {cluster.llm_confidence > 0 && (
-            <span>conf {(cluster.llm_confidence * 100).toFixed(0)}%</span>
-          )}
-          <span className="rounded px-1.5 py-0.5 bg-gray-100 dark:bg-zinc-800 text-[9px]">
-            {cluster.source}
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">
+            {cluster.label ?? "Untitled topic"}
+          </h3>
+          <span className="rounded px-1.5 py-0.5 bg-gray-100 dark:bg-zinc-800 text-[10px] text-zinc-600 dark:text-zinc-300">
+            {cluster.note_ids.length} notes
           </span>
+          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1">
+            <Sparkles className="h-2.5 w-2.5" />
+            coh {(cluster.cohesion * 100).toFixed(0)}%
+          </span>
+          {cluster.llm_confidence > 0 && (
+            <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
+              conf {(cluster.llm_confidence * 100).toFixed(0)}%
+            </span>
+          )}
         </div>
       </div>
 
-      {cluster.evidence_terms.length > 0 && (
-        <div className="mb-2">
-          <div className="text-[10px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-1">
-            Evidence
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        {cluster.evidence_terms.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1 flex items-center gap-1">
+              <Star className="h-3 w-3" />
+              Evidence
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {cluster.evidence_terms.slice(0, 12).map((t) => (
+                <span
+                  key={t}
+                  className="text-[10.5px] rounded-full px-2 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-[#0061ff] dark:text-blue-300 border border-blue-100 dark:border-blue-900/40"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1">
-            {cluster.evidence_terms.slice(0, 12).map((t) => (
-              <span
-                key={t}
-                className="text-[10px] rounded-full px-2 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-900/40"
-              >
-                {t}
-              </span>
-            ))}
+        )}
+
+        {cluster.excluded_terms.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1 flex items-center gap-1">
+              <CircleAlert className="h-3 w-3" />
+              Dropped as noise
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {cluster.excluded_terms.slice(0, 10).map((t) => (
+                <span
+                  key={t}
+                  className="text-[10.5px] rounded-full px-2 py-0.5 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-300 border border-rose-200/70 dark:border-rose-900/40 line-through opacity-80"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {cluster.secondary_topics.length > 0 && (
-        <div className="mb-2">
-          <div className="text-[10px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-1">
-            Related topics
+        <div className="mb-3">
+          <div className="text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1 flex items-center gap-1">
+            <GitBranch className="h-3 w-3" />
+            Related clusters
           </div>
           <div className="flex flex-wrap gap-1">
             {cluster.secondary_topics.map((t) => (
               <span
                 key={t}
-                className="text-[10px] rounded-full px-2 py-0.5 bg-gray-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-gray-100 dark:border-zinc-700"
+                className="text-[10.5px] rounded-full px-2 py-0.5 bg-gray-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-gray-100 dark:border-zinc-700 inline-flex items-center gap-1"
               >
-                {t}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {cluster.excluded_terms.length > 0 && (
-        <div className="mb-2">
-          <div className="text-[10px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-1">
-            Dropped as noise
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {cluster.excluded_terms.slice(0, 10).map((t) => (
-              <span
-                key={t}
-                className="text-[10px] rounded-full px-2 py-0.5 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-900/40 line-through opacity-80"
-              >
+                <CircleCheck className="h-2.5 w-2.5 text-emerald-500" />
                 {t}
               </span>
             ))}

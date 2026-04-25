@@ -61,7 +61,12 @@ const fields: FormField[] = [
 export default function SignUpPage() {
   return (
     <AuthLayout
-      title="Create your account"
+      eyebrow="Get started"
+      title={
+        <>
+          Create your <span style={{ color: "#0061ff" }}>account</span>.
+        </>
+      }
       subtitle="Start your 14-day free trial. No credit card required."
     >
       <AuthForm

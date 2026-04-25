@@ -41,9 +41,81 @@ export type Space = {
 
 export type OutlineHeading = { level: number; text: string };
 
+export type UnderstandQuestionKind =
+  | "explain"
+  | "apply"
+  | "connect"
+  | "example";
+
+export type UnderstandQuestion = {
+  id: string;
+  kind: UnderstandQuestionKind;
+  prompt: string;
+  hint?: string | null;
+  reference: string; // private — used only for evaluation
+  related_note_ids?: string[];
+};
+
+export type UnderstandPack = {
+  questions: UnderstandQuestion[];
+  content_hash: string;
+  related_note_ids: string[];
+  updated_at: string | null;
+};
+
+export type UnderstandEvaluation = {
+  score: number;        // 0..1
+  hits: string[];
+  misses: string[];
+  feedback: string;
+};
+
+export type ExamDifficulty = "medium" | "hard" | "challenge";
+
+export type ExamQuestion = {
+  id: string;
+  prompt: string;
+  reference: string;          // private — stripped before reaching client
+  source_note_ids: string[];
+  points: number;
+  difficulty: ExamDifficulty;
+};
+
+export type ExamPerQuestionResult = {
+  question_id: string;
+  score: number;            // 0..1
+  points_earned: number;
+  hits: string[];
+  misses: string[];
+  feedback: string;
+};
+
+export type ExamEvaluation = {
+  per_question: ExamPerQuestionResult[];
+  total_points: number;
+  earned_points: number;
+  overall: string;
+};
+
+export type ExamSession = {
+  id: string;
+  user_id: string;
+  space_id: string;
+  scope_note_ids: string[];
+  // Client copy: `reference` field is stripped on the wire.
+  questions: Array<Omit<ExamQuestion, "reference">>;
+  answers: Record<string, string>;
+  evaluation: ExamEvaluation | null;
+  duration_seconds: number;
+  started_at: string;
+  finished_at: string | null;
+  status: "active" | "submitted" | "abandoned";
+};
+
 export type NoteCache = {
   summary?: string;
   outline?: OutlineHeading[];
+  understand?: UnderstandPack;
   content_hash?: string;
   keywords?: string[];
   embedding?: number[];
@@ -83,7 +155,9 @@ export type SpaceSectionViewports =
   | "dot"
   | "outline"
   | "tl;dr"
-  | "relationships";
+  | "relationships"
+  | "understand"
+  | "exam";
 export type BottomSectionViewports = "settings" | "logOut" | "backToHome";
 export type AllViewports =
   | HomeSectionViewports

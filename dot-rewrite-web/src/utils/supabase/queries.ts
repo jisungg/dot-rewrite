@@ -229,6 +229,33 @@ export async function addNote(noteData: {
   return data as Note;
 }
 
+// Hard caps to keep payloads sane and rate-limit the engine's input size.
+const MAX_TITLE_LEN = 200;
+const MAX_CONTENT_LEN = 200_000; // 200KB of markdown — plenty for any single note
+const MAX_TAGS = 32;
+const MAX_TAG_LEN = 40;
+
+function sanitizeNoteInput(input: {
+  title: string;
+  content: string;
+  tags: string[];
+}): { title: string; content: string; tags: string[] } {
+  const title = (input.title ?? "").slice(0, MAX_TITLE_LEN);
+  const content = (input.content ?? "").slice(0, MAX_CONTENT_LEN);
+  // Tag set: dedupe, lowercase, alphanumeric/dash only, length-cap, count-cap.
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of input.tags ?? []) {
+    if (typeof raw !== "string") continue;
+    const t = raw.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, MAX_TAG_LEN);
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    tags.push(t);
+    if (tags.length >= MAX_TAGS) break;
+  }
+  return { title, content, tags };
+}
+
 export async function saveNoteAndConnectToSpace(noteData: {
   id?: string;
   space_id: string;
@@ -237,13 +264,18 @@ export async function saveNoteAndConnectToSpace(noteData: {
   tags: string[];
 }): Promise<Note> {
   const { supabase, user } = await requireUser();
+  const cleaned = sanitizeNoteInput({
+    title: noteData.title,
+    content: noteData.content,
+    tags: noteData.tags,
+  });
 
   const updateQuery = supabase
     .from("notes")
     .update({
-      title: noteData.title,
-      content: noteData.content,
-      tags: noteData.tags,
+      title: cleaned.title,
+      content: cleaned.content,
+      tags: cleaned.tags,
       space_id: noteData.space_id,
       // Content changed — engine outputs are now stale. The next Process
       // click (or analyze_space.py run) will re-analyse and flip this
@@ -257,7 +289,7 @@ export async function saveNoteAndConnectToSpace(noteData: {
     : updateQuery.match({
         user_id: user.id,
         space_id: noteData.space_id,
-        title: noteData.title,
+        title: cleaned.title,
       }))
     .select()
     .maybeSingle();
@@ -276,10 +308,10 @@ export async function saveNoteAndConnectToSpace(noteData: {
     .from("notes")
     .insert([
       {
-        title: noteData.title,
-        content: noteData.content,
+        title: cleaned.title,
+        content: cleaned.content,
         space_id: noteData.space_id,
-        tags: noteData.tags,
+        tags: cleaned.tags,
         user_id: user.id,
       },
     ])
@@ -583,6 +615,41 @@ export async function fetchTopicClusters(
     return [];
   }
   return (data ?? []) as TopicClusterRow[];
+}
+
+export async function fetchPrereqEdgesForSpaces(
+  spaceIds: string[],
+): Promise<StudyStateEdgeRow[]> {
+  if (spaceIds.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("study_state_edges")
+    .select("space_id, src_node_id, dst_node_id, kind, weight")
+    .in("space_id", spaceIds)
+    .eq("kind", "prerequisite");
+  if (error) {
+    console.error("fetchPrereqEdgesForSpaces error:", error.message);
+    return [];
+  }
+  return (data ?? []) as StudyStateEdgeRow[];
+}
+
+export async function fetchConfusionPairsForSpaces(
+  spaceIds: string[],
+): Promise<ConfusionPairRow[]> {
+  if (spaceIds.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("confusion_pairs")
+    .select(
+      "space_id, topic_a, topic_b, score, closeness, separability, interpretive_confidence, shared_core_terms, discriminators_a, discriminators_b",
+    )
+    .in("space_id", spaceIds);
+  if (error) {
+    console.error("fetchConfusionPairsForSpaces error:", error.message);
+    return [];
+  }
+  return (data ?? []) as ConfusionPairRow[];
 }
 
 export async function fetchSpaceRelationships(

@@ -774,6 +774,7 @@ export default function Editor({
                     onChange={handleTitleChange}
                     onBlur={handleTitleBlur}
                     onKeyDown={handleTitleKeyDown}
+                    maxLength={200}
                     className="text-sm font-medium text-gray-800 dark:text-zinc-100 bg-transparent border-none outline-none focus:ring-0 w-full"
                     placeholder="Note title..."
                     autoFocus

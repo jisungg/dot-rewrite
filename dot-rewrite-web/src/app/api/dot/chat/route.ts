@@ -1,10 +1,20 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 
-import { createClient } from "@/utils/supabase/server";
 import type { Note, SemanticClusterRow } from "@/data/types";
 import { backendName } from "@/lib/llm-backend";
+import { GROUNDING_RULES } from "@/lib/llm-grounding";
 import { buildNoteContextBlock, retrieveTopK } from "@/lib/dot/retrieve";
+import {
+  HttpError,
+  parseJSONBody,
+  requireString,
+  requireUUID,
+  optionalUUID,
+  errorResponse,
+} from "@/lib/api/validate";
+import { requireUser, requireSpaceOwnership } from "@/lib/api/auth";
+import { enforceRateLimit, maybeSweep } from "@/lib/api/rate-limit";
 
 // Dot — the per-space chat agent.
 //
@@ -26,7 +36,9 @@ const MAX_CONTEXT_NOTES = 6;
 const MAX_HISTORY_TURNS = 4; // 2 user + 2 dot (most recent)
 const MAX_PROMPT_CHARS = 2000;
 
-const SYSTEM_PROMPT = `You are Dot, an assistant that answers questions about a user's personal study notes inside a single "space" (e.g. a class or topic).
+const SYSTEM_PROMPT = `${GROUNDING_RULES}
+
+You are Dot, an assistant that answers questions about a user's personal study notes inside a single "space" (e.g. a class or topic).
 
 You will receive:
 - A "Context" block with the user's most-relevant notes, each as:
@@ -60,62 +72,26 @@ GROUNDING RULES:
 
 Never mention retrieval, embeddings, the context block, or note IDs in your visible output. The user only knows about their notes.`;
 
-type ChatBody = {
-  spaceId?: string;
-  prompt?: string;
-  focusedNoteId?: string | null;
-  tone?: string | null;
-};
-
 export async function POST(req: Request) {
-  let body: ChatBody;
   try {
-    body = (await req.json()) as ChatBody;
-  } catch {
-    return new Response(JSON.stringify({ error: "invalid_json" }), {
-      status: 400,
-    });
-  }
-  const spaceId = body.spaceId?.trim();
-  const prompt = body.prompt?.trim();
-  if (!spaceId) {
-    return new Response(JSON.stringify({ error: "missing_space_id" }), {
-      status: 400,
-    });
-  }
-  if (!prompt) {
-    return new Response(JSON.stringify({ error: "missing_prompt" }), {
-      status: 400,
-    });
-  }
-  const cappedPrompt =
-    prompt.length > MAX_PROMPT_CHARS
-      ? prompt.slice(0, MAX_PROMPT_CHARS - 1) + "…"
-      : prompt;
+    maybeSweep();
+    const body = await parseJSONBody<Record<string, unknown>>(req);
+    const spaceId = requireUUID(body["spaceId"], "spaceId");
+    const promptRaw = requireString(body["prompt"], "prompt", {
+      min: 1,
+      max: MAX_PROMPT_CHARS,
+    }).trim();
+    if (promptRaw.length === 0) {
+      throw new HttpError(400, "empty_prompt");
+    }
+    const cappedPrompt = promptRaw.slice(0, MAX_PROMPT_CHARS);
+    const focusedNoteId = optionalUUID(body["focusedNoteId"], "focusedNoteId");
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return new Response(JSON.stringify({ error: "unauthenticated" }), {
-      status: 401,
-    });
-  }
-
-  // Verify space ownership.
-  const { data: space, error: spaceErr } = await supabase
-    .from("spaces")
-    .select("id, name, code")
-    .eq("id", spaceId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (spaceErr || !space) {
-    return new Response(JSON.stringify({ error: "space_not_found" }), {
-      status: 404,
-    });
-  }
+    const ctx = await requireUser();
+    enforceRateLimit(ctx.user.id, "llm_default");
+    const space = await requireSpaceOwnership(ctx, spaceId);
+    const supabase = ctx.supabase;
+    const user = ctx.user;
 
   // Pull the candidates for retrieval. We only need identifiers + cached
   // summaries + tags, not bodies. Explicit column list keeps the wire
@@ -143,7 +119,7 @@ export async function POST(req: Request) {
     notes,
     clusters,
     k: MAX_CONTEXT_NOTES,
-    focusedNoteId: body.focusedNoteId ?? null,
+    focusedNoteId,
   });
   const contextBlock = buildNoteContextBlock(candidates, {
     maxSummaryChars: 360,
@@ -240,13 +216,16 @@ export async function POST(req: Request) {
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "content-type": "text/plain; charset=utf-8",
-      "cache-control": "no-store",
-      "x-dot-context-notes": String(candidates.length),
-    },
-  });
+    return new Response(stream, {
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store",
+        "x-dot-context-notes": String(candidates.length),
+      },
+    });
+  } catch (err) {
+    return errorResponse(err);
+  }
 }
 
 async function streamAnthropic(

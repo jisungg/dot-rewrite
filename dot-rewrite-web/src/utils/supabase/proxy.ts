@@ -29,11 +29,22 @@ export async function updateSession(request: NextRequest) {
   const authed = !error && !!data.user;
   const { pathname } = request.nextUrl;
 
+  // /auth/callback must always be allowed through — exchanges the code for a session.
+  if (pathname.startsWith("/auth/")) {
+    return response;
+  }
+
   if (pathname.startsWith("/dashboard") && !authed) {
     return NextResponse.redirect(new URL("/sign-in", request.url));
   }
 
-  if (pathname === "/" && authed) {
+  if (
+    authed &&
+    (pathname === "/" ||
+      pathname === "/sign-in" ||
+      pathname === "/sign-up" ||
+      pathname === "/forgot-password")
+  ) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 

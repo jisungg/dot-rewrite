@@ -1,3 +1,4 @@
+import "server-only"; // hard-error if a client component imports this — protects API keys
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 

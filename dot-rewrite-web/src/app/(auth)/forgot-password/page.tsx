@@ -24,8 +24,13 @@ const fields: FormField[] = [
 export default function ForgotPasswordPage() {
   return (
     <AuthLayout
-      title="Reset your password"
-      subtitle="We'll send you a link to reset your password"
+      eyebrow="Forgot password"
+      title={
+        <>
+          Reset your <span style={{ color: "#0061ff" }}>password</span>.
+        </>
+      }
+      subtitle="Enter the email on your account — we'll send a reset link."
     >
       <AuthForm
         fields={fields}

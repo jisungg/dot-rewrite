@@ -145,7 +145,9 @@ def main() -> None:
             store_write.replace_ungrouped_notes(
                 conn, args.space_id, result["ungrouped_notes"],
             )
-            marked = store_write.mark_notes_processed(conn, args.space_id)
+            marked = store_write.mark_notes_processed(
+                conn, args.space_id, started_at=run.started_at,
+            )
             store_write.finish_run(
                 conn, run, "ok", len(notes),
                 notes_text=(

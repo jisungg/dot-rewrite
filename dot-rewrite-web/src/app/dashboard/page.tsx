@@ -21,6 +21,8 @@ import {
   Pilcrow,
   Waypoints,
   Network,
+  BookOpenCheck,
+  GraduationCap,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -57,6 +59,8 @@ import Dot from "@/components/dashboard/class/dot";
 import SpaceOutline from "@/components/dashboard/class/space-outline";
 import SpaceTldr from "@/components/dashboard/class/space-tldr";
 import SpaceRelationships from "@/components/dashboard/class/space-relationships";
+import SpaceUnderstand from "@/components/dashboard/class/space-understand";
+import SpaceExam from "@/components/dashboard/class/space-exam";
 import SettingsPage, {
   type SettingsApi,
 } from "@/components/dashboard/settings/settings";
@@ -64,6 +68,8 @@ import NoteView from "@/components/dashboard/components/note-view";
 import { exportNoteAsPdf } from "@/lib/pdf-export";
 import { toast, Toaster } from "sonner";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { useRealtimeTable } from "@/lib/realtime";
+import { emitEngineUpdate } from "@/lib/engine-events";
 
 interface NavigationItem {
   name: string;
@@ -81,6 +87,8 @@ const spaceNavigationItems: NavigationItem[] = [
   { name: "Outline", icon: TextQuote, id: "outline" },
   { name: "TL;DR", icon: ScanText, id: "tl;dr" },
   { name: "Relationships", icon: Network, id: "relationships" },
+  { name: "Understand", icon: BookOpenCheck, id: "understand" },
+  { name: "Exam", icon: GraduationCap, id: "exam" },
 ];
 const homeBottomItems: NavigationItem[] = [
   { name: "Settings", icon: Settings, id: "settings" },
@@ -127,9 +135,10 @@ function DashboardInner() {
 
   const settingsApiRef = useRef<SettingsApi | null>(null);
   const editorApiRef = useRef<EditorApi | null>(null);
+  const [examActive, setExamActive] = useState(false);
   const [pendingNav, setPendingNav] = useState<null | {
     run: () => void;
-    kind: "settings" | "editor";
+    kind: "settings" | "editor" | "exam";
   }>(null);
   const [resolving, setResolving] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
@@ -142,6 +151,10 @@ function DashboardInner() {
     (next: () => void) => {
       const sApi = settingsApiRef.current;
       const eApi = editorApiRef.current;
+      if (examActive && activeViewport === "exam") {
+        setPendingNav({ run: next, kind: "exam" });
+        return;
+      }
       if (activeViewport === "settings" && sApi && sApi.dirty) {
         setPendingNav({ run: next, kind: "settings" });
         return;
@@ -156,7 +169,7 @@ function DashboardInner() {
       }
       next();
     },
-    [activeViewport],
+    [activeViewport, examActive],
   );
 
   useEffect(() => {
@@ -286,7 +299,14 @@ function DashboardInner() {
         } else if (["editor", "nexus", "notes"].includes(viewport)) {
           setActiveViewport(viewport as allViewports);
         } else if (
-          ["dot", "outline", "tl;dr", "relationships"].includes(viewport)
+          [
+            "dot",
+            "outline",
+            "tl;dr",
+            "relationships",
+            "understand",
+            "exam",
+          ].includes(viewport)
         ) {
           setActiveViewport(viewport as allViewports);
         }
@@ -450,6 +470,52 @@ function DashboardInner() {
     }
   }, [user]);
 
+  const handleSpacesRefetch = useCallback(async () => {
+    if (!user) return;
+    try {
+      const fresh = await getSpaces(user.id);
+      setAllSpaces(fresh);
+    } catch (err) {
+      console.error("getSpaces refetch:", err);
+    }
+  }, [user]);
+
+  // ---- Realtime: live updates without manual reloads ----
+  // Notes (CRUD, processed flips, cache writes) → keep allNotes fresh.
+  useRealtimeTable({
+    table: "notes",
+    filter: user ? `user_id=eq.${user.id}` : undefined,
+    enabled: Boolean(user),
+    onChange: () => {
+      void handleNotesRefetch();
+    },
+  });
+  // Spaces (rename, delete, summary_cache writes) → keep allSpaces fresh.
+  useRealtimeTable({
+    table: "spaces",
+    filter: user ? `user_id=eq.${user.id}` : undefined,
+    enabled: Boolean(user),
+    onChange: () => {
+      void handleSpacesRefetch();
+    },
+  });
+  // Engine-completion signal — when an analyze run finishes, refetch notes
+  // and broadcast so Nexus / Relationships / Understand pick up new
+  // clusters, edges, diagnostics, summaries without a hard reload.
+  useRealtimeTable({
+    table: "analysis_runs",
+    enabled: Boolean(user),
+    onChange: (payload) => {
+      const newRow = payload.new as Record<string, unknown> | null;
+      const status = newRow ? (newRow["status"] as string | undefined) : undefined;
+      const spaceId = newRow ? (newRow["space_id"] as string | undefined) : undefined;
+      if (status === "ok") {
+        void handleNotesRefetch();
+        emitEngineUpdate({ space_id: spaceId ?? null, reason: "analysis_ok" });
+      }
+    },
+  });
+
   const handleNoteToMoveToSpace = useCallback(
     async (noteToMove: Note, newSpace: Space): Promise<Note | null> => {
       if (!noteToMove || !newSpace) return null;
@@ -495,6 +561,10 @@ function DashboardInner() {
         identifier = ` · ${focusedSpace?.code} · tl;dr`;
       } else if (viewport === "relationships" && isFocused) {
         identifier = ` · ${focusedSpace?.code} · relationships`;
+      } else if (viewport === "understand" && isFocused) {
+        identifier = ` · ${focusedSpace?.code} · understand`;
+      } else if (viewport === "exam" && isFocused) {
+        identifier = ` · ${focusedSpace?.code} · exam`;
       } else if (viewport === "settings") {
         identifier = " · settings";
       }
@@ -554,6 +624,22 @@ function DashboardInner() {
             <SpaceRelationships
               focusedSpace={focusedSpace}
               userNotes={focusedNotes}
+            />
+          );
+        case "understand":
+          return (
+            <SpaceUnderstand
+              focusedSpace={focusedSpace}
+              userNotes={focusedNotes}
+              onNoteClick={handleNoteView}
+            />
+          );
+        case "exam":
+          return (
+            <SpaceExam
+              focusedSpace={focusedSpace}
+              userNotes={focusedNotes}
+              onActiveChange={setExamActive}
             />
           );
         default:
@@ -694,12 +780,16 @@ function DashboardInner() {
               className="w-[360px] rounded-lg border border-gray-100/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 glow-border-lg"
             >
               <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                Unsaved changes
+                {pendingNav.kind === "exam"
+                  ? "Leave exam in progress?"
+                  : "Unsaved changes"}
               </h3>
               <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
                 {pendingNav.kind === "settings"
                   ? "You have unsaved settings. Save them before leaving, or discard."
-                  : "You have unsaved note changes. Save to the space, or discard."}
+                  : pendingNav.kind === "exam"
+                    ? "Your exam is still running. Leaving discards your answers and the timer keeps counting. Are you sure?"
+                    : "You have unsaved note changes. Save to the space, or discard."}
               </p>
               <div className="mt-4 flex items-center justify-end gap-2">
                 <button
@@ -707,52 +797,69 @@ function DashboardInner() {
                   onClick={() => setPendingNav(null)}
                   className="text-xs rounded-md px-3 py-1.5 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-40"
                 >
-                  Cancel
+                  {pendingNav.kind === "exam" ? "Stay" : "Cancel"}
                 </button>
-                <button
-                  disabled={resolving}
-                  onClick={() => {
-                    if (pendingNav.kind === "settings") {
-                      settingsApiRef.current?.discard();
-                    } else {
-                      editorApiRef.current?.discard();
-                    }
-                    const next = pendingNav.run;
-                    setPendingNav(null);
-                    next();
-                  }}
-                  className="text-xs rounded-md px-3 py-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40"
-                >
-                  Discard
-                </button>
-                <button
-                  disabled={resolving}
-                  onClick={async () => {
-                    const api =
-                      pendingNav.kind === "settings"
-                        ? settingsApiRef.current
-                        : editorApiRef.current;
-                    if (!api) {
-                      setPendingNav(null);
-                      return;
-                    }
-                    setResolving(true);
-                    try {
-                      await api.save();
+                {pendingNav.kind === "exam" ? (
+                  <button
+                    disabled={resolving}
+                    onClick={() => {
                       const next = pendingNav.run;
+                      setExamActive(false);
                       setPendingNav(null);
                       next();
-                    } catch (err) {
-                      console.error(err);
-                      toast.error("Could not save");
-                    } finally {
-                      setResolving(false);
-                    }
-                  }}
-                  className="text-xs rounded-md border border-zinc-800 dark:border-zinc-200 bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 px-3 py-1.5 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors disabled:opacity-40"
-                >
-                  {resolving ? "Saving..." : "Save & continue"}
-                </button>
+                    }}
+                    className="text-xs rounded-md px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-40"
+                  >
+                    Leave exam
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      disabled={resolving}
+                      onClick={() => {
+                        if (pendingNav.kind === "settings") {
+                          settingsApiRef.current?.discard();
+                        } else {
+                          editorApiRef.current?.discard();
+                        }
+                        const next = pendingNav.run;
+                        setPendingNav(null);
+                        next();
+                      }}
+                      className="text-xs rounded-md px-3 py-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40"
+                    >
+                      Discard
+                    </button>
+                    <button
+                      disabled={resolving}
+                      onClick={async () => {
+                        const api =
+                          pendingNav.kind === "settings"
+                            ? settingsApiRef.current
+                            : editorApiRef.current;
+                        if (!api) {
+                          setPendingNav(null);
+                          return;
+                        }
+                        setResolving(true);
+                        try {
+                          await api.save();
+                          const next = pendingNav.run;
+                          setPendingNav(null);
+                          next();
+                        } catch (err) {
+                          console.error(err);
+                          toast.error("Could not save");
+                        } finally {
+                          setResolving(false);
+                        }
+                      }}
+                      className="text-xs rounded-md border border-zinc-800 dark:border-zinc-200 bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 px-3 py-1.5 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors disabled:opacity-40"
+                    >
+                      {resolving ? "Saving..." : "Save & continue"}
+                    </button>
+                  </>
+                )}
               </div>
             </motion.div>
           </motion.div>

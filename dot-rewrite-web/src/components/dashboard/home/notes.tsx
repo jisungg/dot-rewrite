@@ -202,12 +202,9 @@ export default function Notes({
           { id: toastId },
         );
       } else {
-        toast.success(
-          `Processed ${n} note${n === 1 ? "" : "s"} across ${
-            done.length
-          } space${done.length === 1 ? "" : "s"}`,
-          { id: toastId },
-        );
+        // Dismiss the loading toast quietly — UI state (green checks) is
+        // the canonical confirmation, no need for a verbose success line.
+        toast.dismiss(toastId);
       }
       // Optimistic update — the engine already flipped `processed=true`
       // for every note in each successfully-processed space, so reflect
@@ -226,19 +223,12 @@ export default function Notes({
           }),
         );
       }
-      // Fire-and-forget per-note summary batch for processed spaces so the
-      // note-view modal and space TL;DR are pre-populated on first open.
+      // Fire-and-forget per-note summary batch for processed spaces so
+      // the note-view modal and space TL;DR are pre-populated on first
+      // open. Silent on success — surfaces only via the UI being ready.
       if (done.length > 0) {
-        void summarizeSpaceNotesBatch(done.map((s) => s.space_id)).then(
-          (res) => {
-            if (res.ok && res.stats.processed > 0) {
-              toast.success(
-                `Summarized ${res.stats.processed} new note${
-                  res.stats.processed === 1 ? "" : "s"
-                }`,
-              );
-            }
-          },
+        void summarizeSpaceNotesBatch(done.map((s) => s.space_id)).catch(
+          (err) => console.error("background summary backfill:", err),
         );
       }
       await onProcessed?.();
@@ -453,9 +443,9 @@ export default function Notes({
             type="button"
             onClick={handleProcess}
             disabled={isProcessing || unprocessedNotes.length === 0}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-colors ${
+            className={`press flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-colors ${
               unprocessedNotes.length > 0 && !isProcessing
-                ? "border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60"
+                ? "border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 hover:shadow-[0_1px_0_rgba(37,99,235,0.15)]"
                 : "border-gray-100/80 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-900/60 text-gray-400 dark:text-zinc-500 cursor-not-allowed"
             }`}
             title={
