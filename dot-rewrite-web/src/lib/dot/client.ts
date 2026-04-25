@@ -28,7 +28,12 @@ export async function streamDotChat(
       tone: opts.tone ?? null,
     }),
   });
-  handleQuotaResponse(res, "Dot");
+  const blocked = handleQuotaResponse(res, "Dot");
+  if (blocked) {
+    // Soft-stop: toast is already shown. Return an empty result so the
+    // chat surface doesn't render a raw error.
+    return { full: "", contextNotes: 0 };
+  }
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error ?? `dot_chat_failed_${res.status}`);

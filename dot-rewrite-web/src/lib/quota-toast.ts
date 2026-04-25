@@ -2,35 +2,30 @@
 
 import { toast } from "sonner";
 
-// Read the standard quota headers we attach in lib/api/quota.ts and
-// raise a soft-warning toast at >=80% utilization. Block (HTTP 429)
-// responses raise a different toast that offers an upgrade.
+// Read the quota headers from any quota-protected response and surface
+// a single, friendly Sonner toast. We never throw raw "cap reached" /
+// status-code language at the user — just a calm nudge to upgrade.
 //
-// Call from any client fetch:
-//   const res = await fetch("/api/letters/chat", { ... });
-//   handleQuotaResponse(res, "Letters chat");
-export function handleQuotaResponse(res: Response, label: string): void {
+//   - 429 (block)      → "Upgrade to Plus to keep going" with Upgrade action.
+//   - x-quota-warn=1   → soft "Almost out of free Dot for today" nudge.
+//
+// Returns true when the response was a 429 block; callers can use that
+// to bail out of their normal error path so the chat bubble doesn't
+// also show a red banner.
+export function handleQuotaResponse(res: Response, _label: string): boolean {
   if (res.status === 429) {
-    let body: { kind?: string; limit?: number; window?: string } | null = null;
-    res
-      .clone()
-      .json()
-      .then((data) => {
-        body = data as typeof body;
-      })
-      .catch(() => {});
-    toast.error(`${label} cap reached`, {
-      description: body
-        ? `Your ${body["window"] ?? "daily"} limit for ${body["kind"] ?? label.toLowerCase()} is ${body["limit"] ?? "—"}. Upgrade to Plus for unlimited.`
-        : "Upgrade to Plus to remove the cap.",
+    // Dedupe across multiple callers in the same render tick.
+    toast("Upgrade to Plus to keep going", {
+      id: "quota-upgrade",
+      description: "You're on the Free plan today. Plus removes the cap.",
       action: {
-        label: "See Plus",
+        label: "Upgrade",
         onClick: () => {
           window.location.href = "/pricing";
         },
       },
     });
-    return;
+    return true;
   }
   if (res.headers.get("x-quota-warn") === "1") {
     const used = Number(res.headers.get("x-quota-used") ?? "0");
@@ -38,12 +33,19 @@ export function handleQuotaResponse(res: Response, label: string): void {
     const limit = limitRaw === "unlimited" ? Infinity : Number(limitRaw);
     if (Number.isFinite(limit) && limit > 0) {
       const remaining = Math.max(0, limit - used);
-      toast(`${label} · ${remaining} left today`, {
-        description:
-          remaining === 0
-            ? "You've used everything. Upgrade to Plus for unlimited."
-            : "Plus removes the cap entirely.",
-      });
+      if (remaining <= 2) {
+        toast("Almost out of your free daily allowance", {
+          id: "quota-warn",
+          description: "Upgrade to Plus to keep going without limits.",
+          action: {
+            label: "Upgrade",
+            onClick: () => {
+              window.location.href = "/pricing";
+            },
+          },
+        });
+      }
     }
   }
+  return false;
 }

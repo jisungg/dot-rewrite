@@ -35,7 +35,10 @@ export async function startEngineForSpaces(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ spaceIds }),
   });
-  handleQuotaResponse(res, "Engine analysis");
+  const blocked = handleQuotaResponse(res, "Engine analysis");
+  if (blocked) {
+    return { ok: false, started: [] };
+  }
   return (await res.json()) as EngineStartResponse;
 }
 

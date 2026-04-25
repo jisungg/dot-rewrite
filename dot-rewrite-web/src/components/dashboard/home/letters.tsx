@@ -186,7 +186,17 @@ export default function Letters({ allSpaces }: { allSpaces: Space[] }) {
         }),
       });
 
-      handleQuotaResponse(res, "Letters");
+      const blocked = handleQuotaResponse(res, "Letters");
+      if (blocked) {
+        // Quota toast already shown — silently bail without spamming
+        // the error banner.
+        setStreaming(false);
+        // Pop the optimistic user bubble back off so the user can edit
+        // and try again later.
+        setHistory((h) => h.filter((m) => m.id !== userMsg.id));
+        setPrompt(text);
+        return;
+      }
       if (!res.ok) {
         const errText = await res.text().catch(() => `${res.status}`);
         throw new Error(errText || `request failed (${res.status})`);

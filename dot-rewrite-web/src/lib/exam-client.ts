@@ -49,7 +49,11 @@ export async function startExam(args: {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(args),
   });
-  handleQuotaResponse(res, "Exam");
+  const blocked = handleQuotaResponse(res, "Exam");
+  if (blocked) {
+    // Treat as a soft cancel; the toast already explains why.
+    throw new Error("quota_blocked");
+  }
   const body = (await res.json().catch(() => null)) as
     | (ExamStartResponse & { error?: string; detail?: string })
     | null;

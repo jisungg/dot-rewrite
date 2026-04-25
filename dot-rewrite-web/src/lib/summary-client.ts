@@ -18,7 +18,15 @@ export async function fetchNoteSummary(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ noteId, force: opts.force ?? false }),
   });
-  handleQuotaResponse(res, "Note summary");
+  const blocked = handleQuotaResponse(res, "Note summary");
+  if (blocked) {
+    return {
+      summary: "",
+      outline: [],
+      cached: false,
+      fallback: true,
+    };
+  }
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as
       | { error?: string; detail?: string }
@@ -70,7 +78,10 @@ export async function fetchSpaceSummary(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ spaceId, force: opts.force ?? false }),
   });
-  handleQuotaResponse(res, "Space summary");
+  const blocked = handleQuotaResponse(res, "Space summary");
+  if (blocked) {
+    return { summary: "", cached: false, fallback: true };
+  }
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as
       | { error?: string; detail?: string }

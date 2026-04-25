@@ -23,7 +23,10 @@ export async function fetchUnderstandPack(args: {
       force: args.force ?? false,
     }),
   });
-  handleQuotaResponse(res, "Understand");
+  const blocked = handleQuotaResponse(res, "Understand");
+  if (blocked) {
+    return { cached: false, pack: null };
+  }
   const body = (await res.json().catch(() => null)) as
     | { cached?: boolean; pack?: UnderstandPack; fallback?: boolean; error?: string; detail?: string }
     | null;
