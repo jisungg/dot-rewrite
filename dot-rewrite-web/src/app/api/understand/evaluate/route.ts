@@ -117,7 +117,7 @@ export async function POST(req: Request) {
       hits: [],
       misses: ["No answer provided yet."],
       feedback:
-        "Take a shot at it — even a partial answer in your own words tells you (and me) what you actually know vs. what to brush up on.",
+        "Take a shot at it. Even a partial answer in your own words tells you (and me) what you actually know vs. what to brush up on.",
     };
     return NextResponse.json({ evaluation });
   }

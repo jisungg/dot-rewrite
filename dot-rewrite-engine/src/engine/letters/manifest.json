@@ -1,0 +1,83 @@
+{
+  "corpus_version": "v1",
+  "notes": "Auditable seed manifest. Each entry lists the canonical public source we draw from; passages live in seeds/<discipline>.jsonl.gz alongside this file. Bump corpus_version when you change source URLs, licenses, or chunk text.",
+  "sources": {
+    "P": [
+      {
+        "title": "Stanford Encyclopedia of Philosophy",
+        "url": "https://plato.stanford.edu/",
+        "license": "CC-BY-NC-ND-2.5 (per-entry; non-commercial use of seeded excerpts)",
+        "covers": ["epistemology", "metaphysics", "ethics", "philosophy of mind", "logic"]
+      },
+      {
+        "title": "Internet Encyclopedia of Philosophy",
+        "url": "https://iep.utm.edu/",
+        "license": "CC-BY (per-entry)",
+        "covers": ["history of philosophy", "ethics", "ancient philosophy"]
+      },
+      {
+        "title": "Project Gutenberg primary sources",
+        "url": "https://www.gutenberg.org/",
+        "license": "Public domain (US)",
+        "covers": ["Plato Republic", "Kant Critique of Pure Reason", "Aristotle Nicomachean Ethics"]
+      }
+    ],
+    "M": [
+      {
+        "title": "Wikipedia Mathematics portal",
+        "url": "https://en.wikipedia.org/wiki/Portal:Mathematics",
+        "license": "CC-BY-SA 4.0",
+        "covers": ["linear algebra", "calculus", "discrete", "topology", "number theory"]
+      },
+      {
+        "title": "OpenStax College Algebra / Calculus / Linear Algebra",
+        "url": "https://openstax.org/subjects/math",
+        "license": "CC-BY 4.0",
+        "covers": ["chapter intros + key definitions"]
+      }
+    ],
+    "S": [
+      {
+        "title": "Wikipedia Science portal",
+        "url": "https://en.wikipedia.org/wiki/Portal:Science",
+        "license": "CC-BY-SA 4.0",
+        "covers": ["physics", "biology", "chemistry"]
+      },
+      {
+        "title": "OpenStax University Physics / Biology / Chemistry",
+        "url": "https://openstax.org/subjects/science",
+        "license": "CC-BY 4.0",
+        "covers": ["chapter intros + key concepts"]
+      }
+    ],
+    "C": [
+      {
+        "title": "Wikipedia Computer Science portal",
+        "url": "https://en.wikipedia.org/wiki/Portal:Computer_science",
+        "license": "CC-BY-SA 4.0",
+        "covers": ["algorithms", "data structures", "systems", "ML"]
+      },
+      {
+        "title": "arXiv cs.* abstracts (recent canonical)",
+        "url": "https://arxiv.org/list/cs/recent",
+        "license": "arXiv non-exclusive license to distribute",
+        "covers": ["paper abstracts as reference"]
+      }
+    ],
+    "H": [
+      {
+        "title": "Wikipedia History portal",
+        "url": "https://en.wikipedia.org/wiki/Portal:History",
+        "license": "CC-BY-SA 4.0",
+        "covers": ["world history overviews + period summaries"]
+      },
+      {
+        "title": "Internet Archive — historical primary sources",
+        "url": "https://archive.org/details/texts",
+        "license": "Public domain (US)",
+        "covers": ["primary documents, charters, treaties"]
+      }
+    ]
+  },
+  "extension": "Add a new entry under sources.<discipline>, place chunked passages in seeds/<discipline>.jsonl, then run scripts/seed_letter_corpus.py to embed + upsert. Bump corpus_version in this manifest when content changes."
+}

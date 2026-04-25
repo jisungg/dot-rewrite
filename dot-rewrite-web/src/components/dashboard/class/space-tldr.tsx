@@ -247,7 +247,7 @@ export default function SpaceTldr({
                         title={
                           canRegenerate
                             ? "Regenerate summary"
-                            : "Already up to date — add or edit a note to enable."
+                            : "Already up to date. Add or edit a note to enable."
                         }
                       >
                         <RefreshCw

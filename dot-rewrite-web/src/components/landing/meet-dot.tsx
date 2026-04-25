@@ -66,7 +66,7 @@ export default function MeetDot() {
           <span className="font-mono">~8s avg</span>
         </>
       }
-      caption="A scaled-down preview of the real Dot tab — same input / output layout you'll use inside every space."
+      caption="A scaled-down preview of the real Dot tab. Same input and output layout you'll use inside every space."
     >
       <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
         <div className="p-4 sm:p-5 space-y-3 bg-[#FAFAFA]/50">

@@ -6,6 +6,8 @@ import type { Note, NoteCache, OutlineHeading } from "@/data/types";
 import { backendName, completeJson } from "@/lib/llm-backend";
 import { GROUNDING_RULES } from "@/lib/llm-grounding";
 import { rateLimit, maybeSweep } from "@/lib/api/rate-limit";
+import { enforceQuota } from "@/lib/api/quota";
+import { HttpError } from "@/lib/api/validate";
 
 // Batch per-note summarizer. Fires once per space right after the engine
 // finishes an analyze run, so by the time the user clicks a note it's
@@ -127,6 +129,17 @@ export async function POST(req: Request) {
       { error: "rate_limited", detail: `Try again in ${rl.retryAfter}s.` },
       { status: 429, headers: { "retry-after": String(rl.retryAfter) } },
     );
+  }
+  try {
+    await enforceQuota(supabase, user.id, "summarize");
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 429) {
+      return new NextResponse(err.message, {
+        status: 429,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    throw err;
   }
 
   let query = supabase

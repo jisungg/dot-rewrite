@@ -26,6 +26,7 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
+  Mail,
 } from "lucide-react";
 
 import type {
@@ -55,6 +56,10 @@ import AddSpaceModal from "@/components/dashboard/components/add-space-dialog";
 import Editor, { type EditorApi } from "@/components/dashboard/home/editor";
 import Notes from "@/components/dashboard/home/notes";
 import Nexus from "@/components/dashboard/home/nexus";
+import Letters from "@/components/dashboard/home/letters";
+import BillingBanner from "@/components/dashboard/billing-banner";
+import { useTier } from "@/lib/use-tier";
+import { useRouter } from "next/navigation";
 import Dot from "@/components/dashboard/class/dot";
 import SpaceOutline from "@/components/dashboard/class/space-outline";
 import SpaceTldr from "@/components/dashboard/class/space-tldr";
@@ -81,6 +86,7 @@ const homeNavigationItems: NavigationItem[] = [
   { name: "Editor", icon: Pilcrow, id: "editor" },
   { name: "Notes", icon: Files, id: "notes" },
   { name: "Nexus", icon: Waypoints, id: "nexus" },
+  { name: "Letters", icon: Mail, id: "letters" },
 ];
 const spaceNavigationItems: NavigationItem[] = [
   { name: "Dot", icon: BotMessageSquare, id: "dot" },
@@ -111,7 +117,31 @@ export default function Dashboard() {
   );
 }
 
+function TierBadge({ onClickUpgrade }: { onClickUpgrade: () => void }) {
+  const { isPlus, loading } = useTier();
+  if (loading) return null;
+  return (
+    <div className="px-3 mb-2">
+      {isPlus ? (
+        <div className="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-[10px] font-semibold">
+          <span className="text-[9px]">★</span>
+          Plus
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onClickUpgrade}
+          className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 px-2 py-0.5 text-[10px] font-medium hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/40 dark:hover:text-blue-300 transition-colors"
+        >
+          Free · Upgrade
+        </button>
+      )}
+    </div>
+  );
+}
+
 function DashboardInner() {
+  const router = useRouter();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
   const [user, setUser] = useState<User | null>(null);
@@ -296,7 +326,7 @@ function DashboardInner() {
           setView("home");
           setFocusedSpace(null);
           setActiveViewport("settings");
-        } else if (["editor", "nexus", "notes"].includes(viewport)) {
+        } else if (["editor", "nexus", "notes", "letters"].includes(viewport)) {
           setActiveViewport(viewport as allViewports);
         } else if (
           [
@@ -553,6 +583,8 @@ function DashboardInner() {
         identifier = " · notes";
       } else if (viewport === "nexus") {
         identifier = " · nexus";
+      } else if (viewport === "letters") {
+        identifier = " · letters";
       } else if (viewport === "dot" && isFocused) {
         identifier = ` · ${focusedSpace?.code} · dot`;
       } else if (viewport === "outline" && isFocused) {
@@ -698,6 +730,8 @@ function DashboardInner() {
         );
       case "nexus":
         return <Nexus allSpaces={allSpaces} allNotes={allNotes} />;
+      case "letters":
+        return <Letters allSpaces={allSpaces} />;
       case "settings":
         return (
           <SettingsPage
@@ -713,6 +747,7 @@ function DashboardInner() {
 
   return (
     <div className="relative min-h-screen">
+      <BillingBanner />
       {showLogo && (
         <motion.div
           initial={{ opacity: 1 }}
@@ -1199,6 +1234,7 @@ function DashboardInner() {
                       )}
                     </div>
                     <div className="border-t border-gray-100/80 dark:border-zinc-800 pt-2 pb-4">
+                      <TierBadge onClickUpgrade={() => router.push("/pricing")} />
                       <ul className="space-y-1 px-2">
                         {bottomNavigationItems.map((item, i) => (
                           <motion.li

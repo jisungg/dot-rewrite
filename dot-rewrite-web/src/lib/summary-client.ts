@@ -1,4 +1,5 @@
 import type { OutlineHeading } from "@/data/types";
+import { handleQuotaResponse } from "@/lib/quota-toast";
 
 export type NoteSummary = {
   summary: string;
@@ -17,6 +18,7 @@ export async function fetchNoteSummary(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ noteId, force: opts.force ?? false }),
   });
+  handleQuotaResponse(res, "Note summary");
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as
       | { error?: string; detail?: string }
@@ -68,6 +70,7 @@ export async function fetchSpaceSummary(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ spaceId, force: opts.force ?? false }),
   });
+  handleQuotaResponse(res, "Space summary");
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as
       | { error?: string; detail?: string }

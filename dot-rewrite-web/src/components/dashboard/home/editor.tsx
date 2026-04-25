@@ -929,7 +929,7 @@ export default function Editor({
                   ) : (
                     <p className="text-xs text-gray-500 dark:text-zinc-500">
                       {isEditing
-                        ? "No changes to save — edit the title, content, tags, or space to enable."
+                        ? "No changes to save. Edit the title, content, tags, or space to enable."
                         : "Add some content before saving."}
                     </p>
                   )}

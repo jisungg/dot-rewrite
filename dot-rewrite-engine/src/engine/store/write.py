@@ -447,13 +447,16 @@ def replace_note_metrics(
             """
             INSERT INTO note_metrics
               (space_id, note_id, degree, pagerank, betweenness,
-               is_god_node, is_bridge, is_orphan, is_cut_vertex, community_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               is_god_node, is_bridge, is_orphan, is_cut_vertex, community_id,
+               discipline, discipline_confidence)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             [
                 (
                     m.space_id, m.note_id, m.degree, float(m.pagerank), float(m.betweenness),
                     m.is_god_node, m.is_bridge, m.is_orphan, m.is_cut_vertex, m.community_id,
+                    getattr(m, "discipline", None),
+                    float(getattr(m, "discipline_confidence", 0.0)),
                 )
                 for m in metrics
             ],

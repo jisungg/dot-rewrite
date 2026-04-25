@@ -27,6 +27,8 @@ import {
   useNexusSnapshot,
   useTypedRelations,
 } from "@/lib/use-nexus-snapshot";
+import { useTier } from "@/lib/use-tier";
+import { UpgradeModal, type UpgradeReason } from "@/components/upgrade-modal";
 import NexusGraph, {
   type NexusGraphHandle,
   type NexusGraphLayer,
@@ -61,6 +63,8 @@ export default function Nexus({
   const [isSpaceDropdownOpen, setIsSpaceDropdownOpen] = useState(false);
   const [layers, setLayers] = useState<Layers>(DEFAULT_LAYERS);
   const graphRef = useRef<NexusGraphHandle | null>(null);
+  const { isPlus } = useTier();
+  const [upgradeReason, setUpgradeReason] = useState<UpgradeReason | null>(null);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(searchTerm), 180);
@@ -69,7 +73,35 @@ export default function Nexus({
 
   const spaceIds = useMemo(() => allSpaces.map((s) => s.id), [allSpaces]);
   const { snapshot, status, error } = useNexusSnapshot(spaceIds);
-  const typedRelationsState = useTypedRelations(spaceIds, layers.typed);
+  // Plus-only: typed-relation edges + LLM relations come from typed_relations.
+  const typedRelationsState = useTypedRelations(
+    spaceIds,
+    isPlus && layers.typed,
+  );
+
+  // Plus-gated effective layers — free can toggle the UI but the graph
+  // only renders Plus-only layers when isPlus.
+  const effectiveLayers = useMemo<Layers>(
+    () =>
+      isPlus
+        ? layers
+        : {
+            ...layers,
+            typed: false,
+            godHalos: false,
+            hulls: layers.hulls, // hulls themselves are free; community LABELS are Plus
+          },
+    [isPlus, layers],
+  );
+
+  // Plus-gated insight-kind whitelist for the panel.
+  const allowedInsightKinds = useMemo(
+    () =>
+      isPlus
+        ? null // null = no filter
+        : new Set<string>(["orphan", "emerging"]),
+    [isPlus],
+  );
 
   // Debounced clear of highlight after a focus action so the ring fades.
   useEffect(() => {
@@ -95,9 +127,9 @@ export default function Nexus({
       activeTag,
       activeCommunityId,
       highlightedNoteIds: highlighted,
-      layers,
+      layers: effectiveLayers,
     }),
-    [activeSpace, debouncedSearch, activeTag, activeCommunityId, highlighted, layers],
+    [activeSpace, debouncedSearch, activeTag, activeCommunityId, highlighted, effectiveLayers],
   );
 
   const focusOnNotes = (ids: string[]) => {
@@ -281,7 +313,7 @@ export default function Nexus({
               <div className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
                 {emptyKind === "no-notes" && "Nothing to connect yet"}
                 {emptyKind === "snapshot-empty" && "Snapshot returned no notes"}
-                {emptyKind === "no-edges" && "Notes loaded — no connections yet"}
+                {emptyKind === "no-edges" && "Notes loaded. No connections yet."}
               </div>
               <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-sm">
                 {emptyKind === "no-notes" &&
@@ -309,35 +341,57 @@ export default function Nexus({
           <div className="absolute bottom-3 left-3 rounded-md border border-gray-100/80 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm px-2 py-1.5 space-y-0.5">
             {(
               [
-                ["similarity", "Similarity", "#2563eb"],
-                ["prereq", "Dependencies", "#f97316"],
-                ["confusion", "Confusion", "#dc2626"],
-                ["typed", "Typed relations", "#9333ea"],
-                ["hulls", "Community hulls", "#94a3b8"],
-                ["godHalos", "Anchor halos", "#facc15"],
-              ] as Array<[NexusGraphLayer, string, string]>
-            ).map(([key, label, color]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setLayers((s) => ({ ...s, [key]: !s[key] }))}
-                aria-pressed={layers[key]}
-                className={`flex items-center gap-1.5 w-full px-1 py-0.5 rounded text-[10px] transition-colors ${
-                  layers[key]
-                    ? "text-zinc-700 dark:text-zinc-200"
-                    : "text-zinc-400 dark:text-zinc-500"
-                }`}
-              >
-                <span
-                  className="h-1 w-3 rounded-sm flex-shrink-0"
-                  style={{ backgroundColor: layers[key] ? color : "#cbd5e1" }}
-                />
-                <span className="flex-1 text-left truncate">{label}</span>
-                {key === "typed" && typedRelationsState.status === "loading" && (
-                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                )}
-              </button>
-            ))}
+                ["similarity", "Similarity", "#2563eb", false],
+                ["prereq", "Dependencies", "#f97316", false],
+                ["confusion", "Confusion", "#dc2626", false],
+                ["typed", "Typed relations", "#9333ea", true],
+                ["hulls", "Community hulls", "#94a3b8", false],
+                ["godHalos", "Anchor halos", "#facc15", true],
+              ] as Array<[NexusGraphLayer, string, string, boolean]>
+            ).map(([key, label, color, plusOnly]) => {
+              const locked = plusOnly && !isPlus;
+              const enabled = effectiveLayers[key];
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    if (locked) {
+                      setUpgradeReason({
+                        kind: "feature",
+                        feature:
+                          key === "typed"
+                            ? "Typed relation edges"
+                            : "Anchor (god-node) halos",
+                      });
+                      return;
+                    }
+                    setLayers((s) => ({ ...s, [key]: !s[key] }));
+                  }}
+                  aria-pressed={enabled}
+                  className={`flex items-center gap-1.5 w-full px-1 py-0.5 rounded text-[10px] transition-colors ${
+                    enabled
+                      ? "text-zinc-700 dark:text-zinc-200"
+                      : "text-zinc-400 dark:text-zinc-500"
+                  } ${locked ? "opacity-70" : ""}`}
+                  title={locked ? "Plus only" : undefined}
+                >
+                  <span
+                    className="h-1 w-3 rounded-sm flex-shrink-0"
+                    style={{ backgroundColor: enabled ? color : "#cbd5e1" }}
+                  />
+                  <span className="flex-1 text-left truncate">{label}</span>
+                  {locked && (
+                    <span className="text-[9px] uppercase tracking-wide text-blue-600 dark:text-blue-400 flex-shrink-0">
+                      Plus
+                    </span>
+                  )}
+                  {key === "typed" && typedRelationsState.status === "loading" && (
+                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -348,6 +402,13 @@ export default function Nexus({
               status={status}
               error={error}
               onFocus={focusOnNotes}
+              allowedKinds={allowedInsightKinds}
+              onLockedClick={(kind) =>
+                setUpgradeReason({
+                  kind: "feature",
+                  feature: `${kind.charAt(0).toUpperCase() + kind.slice(1)} insights`,
+                })
+              }
             />
             <section className="border border-gray-100/80 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900 p-3 glow-border">
               <div className="flex items-center gap-1.5 mb-2">
@@ -385,6 +446,11 @@ export default function Nexus({
           </div>
         )}
       </div>
+      <UpgradeModal
+        open={upgradeReason !== null}
+        reason={upgradeReason}
+        onClose={() => setUpgradeReason(null)}
+      />
     </div>
   );
 }

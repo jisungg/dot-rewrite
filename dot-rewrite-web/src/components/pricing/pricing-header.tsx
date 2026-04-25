@@ -15,19 +15,20 @@ export default function PricingHeader() {
             <span className="h-1 w-1 rounded-full bg-[#0061ff]" />
             Pricing
           </div>
-          <h1 className="text-4xl md:text-5xl font-medium tracking-tight text-zinc-900 leading-[1.05]">
-            Pay as <span className="text-[#0061ff]">you grow</span>.
+          <h1 className="text-4xl md:text-5xl font-medium tracking-tight text-zinc-900 dark:text-zinc-100 leading-[1.05]">
+            Two tiers.
           </h1>
         </motion.div>
 
         <motion.p
-          className="text-base md:text-lg text-zinc-600 max-w-2xl mx-auto leading-relaxed"
+          className="text-base md:text-lg text-zinc-600 dark:text-zinc-300 max-w-2xl mx-auto leading-relaxed"
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.15 }}
         >
-          Start for free, upgrade as your study load expands. Verify your
-          student status for an additional discount.
+          Free gives you the full surface: editor, notes, basic Nexus, basic
+          Insights, and daily allowances of every AI tool. Plus removes the caps
+          and unlocks the deep intelligence layer.
         </motion.p>
       </div>
     </section>

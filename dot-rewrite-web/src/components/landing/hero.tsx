@@ -59,7 +59,7 @@ export default function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
         >
-          One workspace per class — editor, notes, semantic graph, and an AI
+          One workspace per class: editor, notes, semantic graph, and an AI
           tutor that reads only what you wrote. Built for focused, grounded
           study.
         </motion.p>
@@ -104,7 +104,7 @@ export default function Hero() {
               changes your study loop.
             </>
           }
-          lead="Every surface — editor, processing pipeline, semantic graph, AI tutor — is grounded in your notes. Pick a tour stop below or scroll through them all."
+          lead="Every surface (editor, processing pipeline, semantic graph, and AI tutor) is grounded in your notes. Pick a tour stop below or scroll through them all."
         >
           <FeatureShowcase />
         </LandingSection>
@@ -114,7 +114,7 @@ export default function Hero() {
           eyebrow="Meet Dot"
           title={
             <>
-              Your study partner —{" "}
+              Your study partner,{" "}
               <span className="text-[#0061ff]">trained on your notes only</span>
               .
             </>
@@ -133,7 +133,7 @@ export default function Hero() {
               per academic discipline.
             </>
           }
-          lead="Where Dot focuses on your class, the Letters connect your studies to public academia — each trained on a curated, auditable corpus per subject."
+          lead="Where Dot focuses on your class, the Letters connect your studies to public academia. Each one is trained on a curated, auditable corpus per subject."
         >
           <LettersAI />
         </LandingSection>
@@ -147,7 +147,7 @@ export default function Hero() {
               <span className="text-[#0061ff]">drawn from your notes</span>.
             </>
           }
-          lead="Nexus turns your notes into a semantic graph — clusters by topic, draws prerequisite arrows between dependent concepts, and flags pairs students commonly confuse."
+          lead="Nexus turns your notes into a semantic graph. It clusters by topic, draws prerequisite arrows between dependent concepts, and flags pairs students commonly confuse."
         >
           <NexusVisualization />
         </LandingSection>
@@ -161,7 +161,7 @@ export default function Hero() {
               formed.
             </>
           }
-          lead="The Relationships tab opens up the structure Nexus visualizes — the topic hierarchy, the evidence terms behind each cluster, and the noise the engine threw out. Browse subjects like a tree, drill into any cluster."
+          lead="The Relationships tab opens up the structure Nexus visualizes: the topic hierarchy, the evidence terms behind each cluster, and the noise the engine threw out. Browse subjects like a tree, then drill into any cluster."
         >
           <RelationshipsShowcase />
         </LandingSection>
@@ -176,7 +176,7 @@ export default function Hero() {
               your own AI.
             </>
           }
-          lead="Free tier covers your first three classes. No card, no setup wizard — sign in and you're in the editor."
+          lead="Free tier covers your first three classes. No card, no setup wizard. Sign in and you're in the editor."
           spacing="tight"
         >
           <AppShowcaseCTA />

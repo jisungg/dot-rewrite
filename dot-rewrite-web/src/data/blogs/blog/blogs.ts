@@ -10,7 +10,7 @@ export type BlogPost = {
 
 export const featured_blog: BlogPost[] = [
   {
-    title: "Introducing .note — Your New Favorite Study Companion",
+    title: "Introducing .note: Your New Favorite Study Companion",
     slug: "launch",
     date: "March 28, 2025",
     excerpt:
@@ -23,7 +23,7 @@ export const featured_blog: BlogPost[] = [
 
 export const blogs: BlogPost[] = [
   {
-    title: "Introducing .note — Your New Favorite Study Companion",
+    title: "Introducing .note: Your New Favorite Study Companion",
     slug: "launch",
     date: "March 28, 2025",
     excerpt:

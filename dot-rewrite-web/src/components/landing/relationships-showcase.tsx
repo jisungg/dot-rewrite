@@ -181,7 +181,7 @@ export default function RelationshipsShowcase() {
         { color: "#22b8cf", text: "Calculus II" },
         { text: "relationships", muted: true },
       ]}
-      caption="Browse the topic hierarchy your notes form, and see exactly which terms support each cluster — and which were dropped as noise."
+      caption="Browse the topic hierarchy your notes form, and see exactly which terms support each cluster and which were dropped as noise."
     >
       <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] divide-y md:divide-y-0 md:divide-x divide-slate-100">
         {/* Subjects tree */}

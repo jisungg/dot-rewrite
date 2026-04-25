@@ -9,34 +9,34 @@ import {
 
 const faqs = [
   {
-    question: "How do I verify my student status?",
+    question: "Is Free really free?",
     answer:
-      "To verify your student status, click on the 'Verify student status' button and upload a valid student ID or enrollment verification from your educational institution. Our team will review your submission within 24 hours.",
+      "Yes, permanently. No trial, no card. You get the editor, notes, spaces (up to 3), the basic Nexus graph, basic Insights, and daily allowances of Dot, Letters, Understand, Exam, and summaries.",
   },
   {
-    question: "Can I change plans later?",
+    question: "What changes when I go Plus?",
     answer:
-      "Yes, you can upgrade or downgrade your plan at any time. Changes will be applied immediately, and your billing will be adjusted accordingly.",
+      "Daily caps disappear, spaces and notes go unlimited, and the full Nexus intelligence layer unlocks: anchors (god-nodes), bridges, typed relations (LLM-extracted on bridges + anchors), labeled communities, and all 7 Insight kinds (bridges, dependency chains, contradictions, concept reach, emerging clusters, plus the two Free already shows).",
   },
   {
-    question: "Do you offer additional student discounts?",
+    question: "What happens when I hit a free cap?",
     answer:
-      "Our Verified Student plan already offers a significant discount. For educational institutions looking to provide .note to multiple students, please contact our sales team for special group rates.",
+      "We warn you at 80% with a soft toast and stop you at 100% with a one-click upgrade prompt. Caps reset at midnight UTC (or weekly for Exam). No silent failures, no surprise charges.",
   },
   {
-    question: "Can I cancel my subscription anytime?",
+    question: "Can I cancel anytime?",
     answer:
-      "Yes, you can cancel your subscription at any time. Your access will continue until the end of your billing period.",
+      "Yes. Plus is month-to-month (or annual at a discount). When you cancel, you keep Plus access until the end of the period. After that, your account drops back to Free with all your data intact; nothing is deleted.",
+  },
+  {
+    question: "Will I lose my notes if I downgrade?",
+    answer:
+      "No. Your notes, spaces, and chat history all stay. If you exceed Free limits after downgrade (e.g. you have 8 spaces and Free allows 3), the existing data stays read-only; new spaces or notes are paused until you upgrade or trim down.",
   },
   {
     question: "What payment methods do you accept?",
     answer:
-      "We accept all major credit cards, PayPal, and Apple Pay. For annual plans, we also offer invoicing options.",
-  },
-  {
-    question: "Is there a limit to how many subjects I can study?",
-    answer:
-      "No, there's no limit to the number of subjects. You can organize your materials into different subjects and courses as needed.",
+      "All major credit cards via Stripe. Annual plans available at a discount (~28% off the monthly equivalent).",
   },
 ];
 

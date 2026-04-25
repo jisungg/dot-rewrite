@@ -6,6 +6,8 @@ import path from "node:path";
 
 import { createClient } from "@/utils/supabase/server";
 import { rateLimit, maybeSweep } from "@/lib/api/rate-limit";
+import { enforceQuota } from "@/lib/api/quota";
+import { HttpError } from "@/lib/api/validate";
 
 // Local-dev helper: kick off the Python engine per space owned by the caller,
 // then return immediately. Runs go to a detached child so the HTTP request
@@ -89,6 +91,17 @@ export async function POST(req: Request) {
       { error: "rate_limited", detail: `Try again in ${rl.retryAfter}s.` },
       { status: 429, headers: { "retry-after": String(rl.retryAfter) } },
     );
+  }
+  try {
+    await enforceQuota(supabase, user.id, "analyze.manual");
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 429) {
+      return new NextResponse(err.message, {
+        status: 429,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    throw err;
   }
 
   const { data: owned, error: ownErr } = await supabase

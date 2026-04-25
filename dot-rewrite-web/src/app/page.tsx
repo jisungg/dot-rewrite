@@ -1,21 +1,16 @@
-import { redirect } from "next/navigation";
 import Header from "@/components/layout/header";
 import Footer from "@/components/layout/footer";
 import Hero from "@/components/landing/hero";
 import { ForceLightTheme } from "@/components/force-light-theme";
-import { createClient } from "@/utils/supabase/server";
 
 // `/` lives outside the (landing) route group, so it owns its own chrome.
 // Same shape as the (landing) layout so the marketing site looks
 // identical regardless of which entry point the user lands on.
+//
+// Signed-in users are NOT auto-redirected — the Header swaps its CTA
+// to "Dashboard" so they can choose to navigate.
 
 export default async function Home() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user) redirect("/dashboard");
-
   return (
     <div className="relative min-h-screen bg-white text-zinc-900">
       <ForceLightTheme />

@@ -54,6 +54,7 @@ from ..extract import (
     relation_llm as nexus_relation_llm,
     relation_spacy as nexus_relation_spacy,
 )
+from ..letters import discipline as letters_discipline
 from ..llm import labeler as llm_labeler
 from ..explain import (
     explain_confusion,
@@ -392,6 +393,22 @@ def run_analysis(
         "nexus_centrality",
         lambda: nexus_centrality.compute_metrics(notes, semantic_edges, semantic_clusters),
         [],
+    )
+    # Discipline classification → attached onto metrics in place. Reads
+    # space-declared discipline (when present) as a soft fallback.
+    _stage(
+        "letters_discipline",
+        lambda: letters_discipline.attach_to_metrics(
+            nexus_metrics,
+            letters_discipline.classify_notes(
+                notes,
+                semantic_clusters,
+                declared_discipline_by_space={
+                    n.space_id: getattr(n, "declared_discipline", None) for n in notes
+                },
+            ),
+        ),
+        None,
     )
     nexus_relations_llm = _stage(
         "nexus_relations_llm",

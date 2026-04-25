@@ -1,18 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/utils/supabase/client";
+
+type AuthState = "loading" | "anon" | "user";
 
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
+  const [auth, setAuth] = useState<AuthState>("loading");
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (cancelled) return;
+      setAuth(data.user ? "user" : "anon");
+    })();
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuth(session?.user ? "user" : "anon");
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   return (
     <header
@@ -53,14 +75,30 @@ export default function Header() {
         </nav>
 
         <div className="absolute right-4 flex items-center space-x-4">
-          <Link href="/sign-in">
-            <Button
-              variant="outline"
-              className="border-gray-200 text-[#0061ff] hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200"
-            >
-              Log In
-            </Button>
-          </Link>
+          {auth === "user" ? (
+            <Link href="/dashboard">
+              <Button
+                variant="default"
+                className="bg-[#0061ff] text-white hover:bg-[#0050d6] inline-flex items-center gap-1.5"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                Dashboard
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/sign-in">
+              <Button
+                variant="outline"
+                className={cn(
+                  "border-gray-200 text-[#0061ff] hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200",
+                  // Avoid layout flicker on first paint while we resolve auth.
+                  auth === "loading" && "opacity-70",
+                )}
+              >
+                Log In
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
     </header>

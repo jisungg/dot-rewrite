@@ -56,7 +56,7 @@ const letters: LetterAI[] = [
       {
         kind: "p",
         html:
-          'Each entry of the composite Jacobian is a sum over partial derivatives — a direct generalization of the 1-D product.',
+          'Each entry of the composite Jacobian is a sum over partial derivatives, a direct generalization of the 1-D product.',
       },
     ],
   },
@@ -78,7 +78,7 @@ const letters: LetterAI[] = [
       {
         kind: "p",
         html:
-          'The <strong>spliceosome</strong> — a ribonucleoprotein complex — recognizes introns by their 5′ splice site, branch point, and 3′ splice site, then catalyzes two transesterification reactions:',
+          'The <strong>spliceosome</strong>, a ribonucleoprotein complex, recognizes introns by their 5′ splice site, branch point, and 3′ splice site, then catalyzes two transesterification reactions:',
       },
       {
         kind: "math",
@@ -115,7 +115,7 @@ const letters: LetterAI[] = [
       {
         kind: "p",
         html:
-          'You pick $k$ and $m$ for your target false-positive rate. There are no false negatives — only "definitely not present" or "probably present".',
+          'You pick $k$ and $m$ for your target false-positive rate. There are no false negatives; only "definitely not present" or "probably present".',
       },
     ],
   },
@@ -142,7 +142,7 @@ const letters: LetterAI[] = [
       {
         kind: "p",
         html:
-          'Utilitarianism instead measures right action by aggregate welfare — Bentham\'s "greatest good for the greatest number." Same act, opposite test: form vs. outcome.',
+          'Utilitarianism instead measures right action by aggregate welfare, following Bentham\'s "greatest good for the greatest number." Same act, opposite test: form vs. outcome.',
       },
     ],
   },
@@ -169,7 +169,7 @@ const letters: LetterAI[] = [
       {
         kind: "p",
         html:
-          'Modern consensus: contingency mattered more than any single actor — but Berlin\'s blank check to Vienna closes most of the alternative paths.',
+          'Modern consensus: contingency mattered more than any single actor, but Berlin\'s blank check to Vienna closes most of the alternative paths.',
       },
     ],
   },

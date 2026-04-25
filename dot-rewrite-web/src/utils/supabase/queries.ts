@@ -56,6 +56,29 @@ function hydrateProfile(raw: Record<string, unknown>): Profile {
   };
 }
 
+// Lightweight inline tier check for the queries layer (this file already
+// runs server-side via "use server"). Mirrors lib/api/tier.ts.
+async function resolveUserTier(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<"free" | "plus"> {
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("tier, status, current_period_end")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !data || data.tier !== "plus" || data.status !== "active") {
+    return "free";
+  }
+  if (
+    data.current_period_end &&
+    new Date(data.current_period_end).getTime() < Date.now()
+  ) {
+    return "free";
+  }
+  return "plus";
+}
+
 async function requireUser() {
   const supabase = await createClient();
   const {
@@ -99,6 +122,21 @@ export async function addSpace(spaceData: {
   }
   if (spaceData.name.length > 25) {
     throw new Error("The name for your space must be under 25 characters.");
+  }
+
+  // Free-tier cap: 3 spaces. Plus is unlimited. Server-side enforcement
+  // mirrors the client-side gate so a stale UI cannot bypass.
+  const tier = await resolveUserTier(supabase, user.id);
+  if (tier === "free") {
+    const { count } = await supabase
+      .from("spaces")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id);
+    if ((count ?? 0) >= 3) {
+      throw new Error(
+        "FREE_SPACE_LIMIT: You've hit the 3-space cap on the free tier. Upgrade to Plus for unlimited spaces.",
+      );
+    }
   }
 
   const { data, error } = await supabase
@@ -307,6 +345,22 @@ export async function saveNoteAndConnectToSpace(noteData: {
   if (updated.data) {
     revalidatePath("/dashboard");
     return updated.data as Note;
+  }
+
+  // About to insert a new note → enforce free-tier per-space cap (150).
+  const tier = await resolveUserTier(supabase, user.id);
+  if (tier === "free") {
+    const { count } = await supabase
+      .from("notes")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("space_id", noteData.space_id)
+      .eq("archived", false);
+    if ((count ?? 0) >= 150) {
+      throw new Error(
+        "FREE_NOTE_LIMIT: You've hit the 150-notes-per-space cap on the free tier. Upgrade to Plus for unlimited notes.",
+      );
+    }
   }
 
   const inserted = await supabase

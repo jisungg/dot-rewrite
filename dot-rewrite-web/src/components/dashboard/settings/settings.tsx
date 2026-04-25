@@ -4,7 +4,10 @@ import { redirect } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { MutableRefObject } from "react";
 import type { User } from "@supabase/supabase-js";
-import { Check, Monitor, Moon, Sun } from "lucide-react";
+import { Check, Monitor, Moon, Sun, Sparkles, ExternalLink, Loader2 } from "lucide-react";
+import Link from "next/link";
+
+import { useTier } from "@/lib/use-tier";
 
 export type SettingsApi = {
   dirty: boolean;
@@ -244,6 +247,10 @@ export default function SettingsPage({
 
           <Divider />
 
+          <BillingSection />
+
+          <Divider />
+
           <section className="space-y-4">
             <SectionHeader
               title="Theme"
@@ -465,5 +472,88 @@ function ToggleRow({
         />
       </button>
     </div>
+  );
+}
+
+function BillingSection() {
+  const { tier: _tier, loading, isPlus } = useTier();
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
+
+  const openPortal = async () => {
+    setPortalError(null);
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/stripe/portal", { method: "POST" });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => `${res.status}`);
+        throw new Error(txt || `request failed (${res.status})`);
+      }
+      const { url } = (await res.json()) as { url?: string };
+      if (!url) throw new Error("no_portal_url");
+      window.location.href = url;
+    } catch (err) {
+      setPortalError(err instanceof Error ? err.message : String(err));
+      setPortalLoading(false);
+    }
+  };
+
+  return (
+    <section className="space-y-4">
+      <SectionHeader
+        title="Billing"
+        description="Your plan and subscription management."
+      />
+      <div className="rounded-lg border border-gray-100/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 p-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-medium text-zinc-800 dark:text-zinc-100">
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400" />
+            ) : isPlus ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-[11px] font-semibold">
+                <Sparkles className="h-3 w-3" /> Plus Student
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 px-2 py-0.5 text-[11px] font-semibold">
+                Free
+              </span>
+            )}
+            <span className="text-[12px] text-zinc-500 dark:text-zinc-400 truncate">
+              {isPlus
+                ? "Unlimited everything · cancel anytime."
+                : "Daily caps apply. Plus removes them and unlocks the full Nexus."}
+            </span>
+          </div>
+          {portalError && (
+            <div className="mt-2 text-[11px] text-red-500 dark:text-red-400">
+              {portalError}
+            </div>
+          )}
+        </div>
+        {isPlus ? (
+          <button
+            type="button"
+            onClick={() => void openPortal()}
+            disabled={portalLoading}
+            className="h-8 px-3 rounded-md text-[12px] font-medium border border-gray-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-gray-50 dark:hover:bg-zinc-800 inline-flex items-center gap-1.5"
+          >
+            {portalLoading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <ExternalLink className="h-3 w-3" />
+            )}
+            Manage
+          </button>
+        ) : (
+          <Link
+            href="/pricing"
+            className="h-8 px-3 rounded-md text-[12px] font-medium bg-blue-600 hover:bg-blue-500 text-white inline-flex items-center gap-1.5"
+          >
+            <Sparkles className="h-3 w-3" />
+            Upgrade
+          </Link>
+        )}
+      </div>
+    </section>
   );
 }

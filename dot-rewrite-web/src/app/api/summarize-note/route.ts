@@ -6,6 +6,8 @@ import type { Note, NoteCache, OutlineHeading } from "@/data/types";
 import { backendName, completeJson } from "@/lib/llm-backend";
 import { GROUNDING_RULES } from "@/lib/llm-grounding";
 import { rateLimit, maybeSweep } from "@/lib/api/rate-limit";
+import { enforceQuota } from "@/lib/api/quota";
+import { HttpError } from "@/lib/api/validate";
 
 // On-demand per-note summary. One call per user click at most, and
 // results are cached on `notes.cache` keyed by a content hash — a
@@ -114,6 +116,17 @@ export async function POST(req: Request) {
       { error: "rate_limited", detail: `Try again in ${rl.retryAfter}s.` },
       { status: 429, headers: { "retry-after": String(rl.retryAfter) } },
     );
+  }
+  try {
+    await enforceQuota(supabase, user.id, "summarize");
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 429) {
+      return new NextResponse(err.message, {
+        status: 429,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    throw err;
   }
 
   const { data: noteRow, error: readErr } = await supabase

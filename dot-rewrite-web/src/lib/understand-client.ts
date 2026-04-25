@@ -1,4 +1,5 @@
 import type { UnderstandEvaluation, UnderstandPack } from "@/data/types";
+import { handleQuotaResponse } from "@/lib/quota-toast";
 
 export type FetchPackResult = {
   cached: boolean;
@@ -22,6 +23,7 @@ export async function fetchUnderstandPack(args: {
       force: args.force ?? false,
     }),
   });
+  handleQuotaResponse(res, "Understand");
   const body = (await res.json().catch(() => null)) as
     | { cached?: boolean; pack?: UnderstandPack; fallback?: boolean; error?: string; detail?: string }
     | null;

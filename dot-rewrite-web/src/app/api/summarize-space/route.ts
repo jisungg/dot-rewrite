@@ -6,6 +6,8 @@ import type { Note, NoteCache, Space, SpaceSummaryCache } from "@/data/types";
 import { backendName, completeJson } from "@/lib/llm-backend";
 import { GROUNDING_RULES } from "@/lib/llm-grounding";
 import { rateLimit, maybeSweep } from "@/lib/api/rate-limit";
+import { enforceQuota } from "@/lib/api/quota";
+import { HttpError } from "@/lib/api/validate";
 
 // Per-space TL;DR. One or two concrete sentences describing what lives in
 // the space, reusing already-computed per-note summaries when present so
@@ -135,6 +137,17 @@ export async function POST(req: Request) {
       { error: "rate_limited", detail: `Try again in ${rl.retryAfter}s.` },
       { status: 429, headers: { "retry-after": String(rl.retryAfter) } },
     );
+  }
+  try {
+    await enforceQuota(supabase, user.id, "summarize");
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 429) {
+      return new NextResponse(err.message, {
+        status: 429,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    throw err;
   }
 
   // Read core space fields first. We intentionally do NOT include

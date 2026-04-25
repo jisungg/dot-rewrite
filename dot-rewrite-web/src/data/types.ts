@@ -150,7 +150,12 @@ export type Message = {
 };
 
 export type Views = "home" | "space";
-export type HomeSectionViewports = "editor" | "editEditor" | "notes" | "nexus";
+export type HomeSectionViewports =
+  | "editor"
+  | "editEditor"
+  | "notes"
+  | "nexus"
+  | "letters";
 export type SpaceSectionViewports =
   | "dot"
   | "outline"
@@ -441,7 +446,7 @@ export const AgentInformation = {
   parameter:
     "tone (default: neutral, options: reflective, casual, motivational)",
   context:
-    "Dot isn't just chatty — it's built for the big stuff. When your notes start getting complex, Dot helps you sort through the tangle, spot hidden links, and push your ideas into new territory.",
+    "Dot isn't just chatty; it's built for the big stuff. When your notes start getting complex, Dot helps you sort through the tangle, spot hidden links, and push your ideas into new territory.",
   inputFields: [
     {
       name: "prompt",

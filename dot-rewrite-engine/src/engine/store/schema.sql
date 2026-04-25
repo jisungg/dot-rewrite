@@ -369,6 +369,39 @@ CREATE INDEX IF NOT EXISTS nexus_insights_kind_idx
     ON nexus_insights(space_id, kind, score DESC);
 
 -- ============================================================
+-- Letters: per-discipline corpus + per-note discipline tag.
+-- See web migration 20260425010000_letters.sql for RLS + grants.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS letter_corpus (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    discipline      text NOT NULL,
+    source_kind     text NOT NULL DEFAULT 'seed',
+    source_url      text NOT NULL,
+    license         text NOT NULL DEFAULT '',
+    title           text NOT NULL DEFAULT '',
+    section         text NOT NULL DEFAULT '',
+    content         text NOT NULL,
+    content_hash    text NOT NULL,
+    vector          real[] NOT NULL DEFAULT '{}',
+    dim             int  NOT NULL DEFAULT 0,
+    model           text NOT NULL DEFAULT '',
+    retrieved_at    timestamptz NOT NULL DEFAULT now(),
+    corpus_version  text NOT NULL DEFAULT 'v1',
+    UNIQUE (discipline, content_hash, corpus_version)
+);
+CREATE INDEX IF NOT EXISTS letter_corpus_discipline_idx
+    ON letter_corpus(discipline);
+CREATE INDEX IF NOT EXISTS letter_corpus_version_idx
+    ON letter_corpus(corpus_version, discipline);
+
+ALTER TABLE note_metrics
+    ADD COLUMN IF NOT EXISTS discipline            text,
+    ADD COLUMN IF NOT EXISTS discipline_confidence real NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS note_metrics_discipline_idx
+    ON note_metrics(space_id, discipline)
+    WHERE discipline IS NOT NULL;
+
+-- ============================================================
 -- Web read access: authenticated role reads rows scoped to spaces it owns.
 -- RLS joins back to public.spaces(user_id) which already has its own RLS.
 -- Engine writes via service-role DB URL, so RLS does not block the engine.

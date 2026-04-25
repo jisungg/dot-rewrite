@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/validate";
 import { requireUser, requireSpaceOwnership } from "@/lib/api/auth";
 import { enforceRateLimit, maybeSweep } from "@/lib/api/rate-limit";
+import { enforceQuota, quotaHeaders } from "@/lib/api/quota";
 
 // Dot — the per-space chat agent.
 //
@@ -89,9 +90,10 @@ export async function POST(req: Request) {
 
     const ctx = await requireUser();
     enforceRateLimit(ctx.user.id, "llm_default");
-    const space = await requireSpaceOwnership(ctx, spaceId);
     const supabase = ctx.supabase;
     const user = ctx.user;
+    const quota = await enforceQuota(supabase, user.id, "dot.chat");
+    const space = await requireSpaceOwnership(ctx, spaceId);
 
   // Pull the candidates for retrieval. We only need identifiers + cached
   // summaries + tags, not bodies. Explicit column list keeps the wire
@@ -221,6 +223,7 @@ export async function POST(req: Request) {
         "content-type": "text/plain; charset=utf-8",
         "cache-control": "no-store",
         "x-dot-context-notes": String(candidates.length),
+        ...quotaHeaders(quota),
       },
     });
   } catch (err) {

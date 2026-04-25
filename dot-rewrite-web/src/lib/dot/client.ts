@@ -1,3 +1,5 @@
+import { handleQuotaResponse } from "@/lib/quota-toast";
+
 export type DotChatOptions = {
   spaceId: string;
   prompt: string;
@@ -26,6 +28,7 @@ export async function streamDotChat(
       tone: opts.tone ?? null,
     }),
   });
+  handleQuotaResponse(res, "Dot");
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error ?? `dot_chat_failed_${res.status}`);

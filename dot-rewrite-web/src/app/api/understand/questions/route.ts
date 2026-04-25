@@ -12,6 +12,8 @@ import type {
 import { backendName, completeJson } from "@/lib/llm-backend";
 import { GROUNDING_RULES } from "@/lib/llm-grounding";
 import { rateLimit, maybeSweep } from "@/lib/api/rate-limit";
+import { enforceQuota, quotaHeaders } from "@/lib/api/quota";
+import { HttpError } from "@/lib/api/validate";
 
 // Generate (or return cached) "Understand" question pack for one note.
 //
@@ -169,6 +171,18 @@ export async function POST(req: Request) {
       { status: 429, headers: { "retry-after": String(rl.retryAfter) } },
     );
   }
+  let quota;
+  try {
+    quota = await enforceQuota(supabase, user.id, "understand");
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 429) {
+      return new NextResponse(err.message, {
+        status: 429,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    throw err;
+  }
 
   // Load focused note (with cache).
   const { data: noteRow, error: noteErr } = await supabase
@@ -306,5 +320,8 @@ export async function POST(req: Request) {
     console.warn("understand.questions: cache write failed:", writeErr.message);
   }
 
-  return NextResponse.json({ cached: false, pack });
+  return NextResponse.json(
+    { cached: false, pack },
+    { headers: quotaHeaders(quota) },
+  );
 }

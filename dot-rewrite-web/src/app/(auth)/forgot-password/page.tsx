@@ -30,7 +30,7 @@ export default function ForgotPasswordPage() {
           Reset your <span style={{ color: "#0061ff" }}>password</span>.
         </>
       }
-      subtitle="Enter the email on your account — we'll send a reset link."
+      subtitle="Enter the email on your account, and we'll send a reset link."
     >
       <AuthForm
         fields={fields}

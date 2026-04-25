@@ -26,6 +26,10 @@ type Props = {
   status: "idle" | "loading" | "ready" | "error";
   error: string | null;
   onFocus: (noteIds: string[]) => void;
+  /** Whitelist of insight kinds the current tier can see; null = all. */
+  allowedKinds?: Set<string> | null;
+  /** Called when a Plus-only insight kind is clicked. */
+  onLockedClick?: (kind: NexusInsightKind) => void;
 };
 
 type Section = {
@@ -104,7 +108,14 @@ function focusableNoteIds(insight: NexusInsight): string[] {
   }
 }
 
-export default function NexusInsightsPanel({ snapshot, status, error, onFocus }: Props) {
+export default function NexusInsightsPanel({
+  snapshot,
+  status,
+  error,
+  onFocus,
+  allowedKinds,
+  onLockedClick,
+}: Props) {
   const [openInsightId, setOpenInsightId] = useState<string | null>(null);
   const detail = useInsightDetail(openInsightId);
 
@@ -152,7 +163,8 @@ export default function NexusInsightsPanel({ snapshot, status, error, onFocus }:
 
       {SECTIONS.map(({ kind, label, Icon }) => {
         const items = grouped.get(kind) ?? [];
-        if (items.length === 0) return null;
+        const locked = allowedKinds !== undefined && allowedKinds !== null && !allowedKinds.has(kind);
+        if (items.length === 0 && !locked) return null;
         return (
           <section
             key={kind}
@@ -163,10 +175,30 @@ export default function NexusInsightsPanel({ snapshot, status, error, onFocus }:
               <h3 className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                 {label}
               </h3>
-              <span className="ml-auto text-[10px] text-zinc-400 dark:text-zinc-500">
-                {items.length}
-              </span>
+              {locked ? (
+                <button
+                  type="button"
+                  onClick={() => onLockedClick?.(kind)}
+                  className="ml-auto text-[9px] uppercase tracking-wide text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Plus
+                </button>
+              ) : (
+                <span className="ml-auto text-[10px] text-zinc-400 dark:text-zinc-500">
+                  {items.length}
+                </span>
+              )}
             </div>
+            {locked && (
+              <button
+                type="button"
+                onClick={() => onLockedClick?.(kind)}
+                className="w-full text-left text-[11px] text-zinc-500 dark:text-zinc-400 italic hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              >
+                Upgrade to Plus to unlock {label.toLowerCase()}.
+              </button>
+            )}
+            {!locked && (
             <ul className="space-y-1">
               {items.slice(0, 6).map((insight) => {
                 const isOpen = openInsightId === insight.id;
@@ -212,6 +244,7 @@ export default function NexusInsightsPanel({ snapshot, status, error, onFocus }:
                 );
               })}
             </ul>
+            )}
           </section>
         );
       })}

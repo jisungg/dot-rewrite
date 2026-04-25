@@ -36,7 +36,7 @@ const features: Feature[] = [
     key: "dot",
     title: "Built from your notes",
     description:
-      "Every AI surface in .note — Dot, summaries, exam questions, grading — is grounded strictly in what you wrote. No textbook detours, no outside facts.",
+      "Every AI surface in .note (Dot, summaries, exam questions, and grading) is grounded strictly in what you wrote. No textbook detours, no outside facts.",
     spaceColor: "#22b8cf",
     spaceName: "Calculus II",
     tab: "dot",
@@ -45,7 +45,7 @@ const features: Feature[] = [
     key: "scope",
     title: "Keep it in scope",
     description:
-      "Ask about a single class, a single note, or a single proof. The retrieval engine only looks where you point it — never past your space's walls.",
+      "Ask about a single class, a single note, or a single proof. The retrieval engine only looks where you point it, never past your space's walls.",
     spaceColor: "#0061ff",
     spaceName: "All Notes",
     tab: "notes",
@@ -54,7 +54,7 @@ const features: Feature[] = [
     key: "central",
     title: "Minimalist, focused, central",
     description:
-      "One workspace per class. Editor, notes, semantic graph, summaries, agent — all in the same shell, one keystroke apart. No tab-hopping.",
+      "One workspace per class. Editor, notes, semantic graph, summaries, and agent all live in the same shell, one keystroke apart. No tab-hopping.",
     spaceColor: "#f97316",
     spaceName: "Modern Lit.",
     tab: "shell",
@@ -63,7 +63,7 @@ const features: Feature[] = [
     key: "you",
     title: "Built for you",
     description:
-      "Markdown, math, code — write your way. Dark or light. Pinned notes, drag tags, export PDF. The interface adapts to your study, not the other way around.",
+      "Markdown, math, and code: write your way. Dark or light. Pinned notes, drag tags, export PDF. The interface adapts to your study, not the other way around.",
     spaceColor: "#10b981",
     spaceName: "CS 61A",
     tab: "editor",

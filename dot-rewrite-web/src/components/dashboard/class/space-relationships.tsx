@@ -446,7 +446,7 @@ export default function SpaceRelationships({
 
             <Section icon={Crown} title={`Anchors / God-nodes (${anchors.length})`}>
               {anchors.length === 0 ? (
-                <Empty label="No anchor notes — engine analysis not run yet." />
+                <Empty label="No anchor notes yet. Engine analysis hasn't run." />
               ) : (
                 <MetricNoteList
                   rows={anchors}
@@ -494,7 +494,7 @@ export default function SpaceRelationships({
               title={`Cut vertices (${cutVertices.length})`}
             >
               {cutVertices.length === 0 ? (
-                <Empty label="No fragility points — graph stays connected without any single note." />
+                <Empty label="No fragility points. The graph stays connected without any single note." />
               ) : (
                 <MetricNoteList
                   rows={cutVertices}
@@ -615,7 +615,7 @@ export default function SpaceRelationships({
               {nexusStatus === "loading" ? (
                 <Empty label="Loading insights…" />
               ) : nexus.insights_top.length === 0 ? (
-                <Empty label="No surfaced insights yet — re-run engine." />
+                <Empty label="No surfaced insights yet. Re-run the engine." />
               ) : (
                 <ul className="space-y-2 text-[11px]">
                   {[...insightsByKind.entries()].map(([kind, items]) => (

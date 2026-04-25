@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Github, Instagram, Linkedin, Twitter } from "lucide-react";
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
@@ -16,36 +15,6 @@ export default function Footer() {
               Making education smarter through AI. Transform your lecture notes
               into a personal AI tutor.
             </p>
-            <div className="flex flex-wrap items-center gap-4">
-              <Link
-                href="#"
-                className="text-zinc-400 hover:text-zinc-900 transition-colors"
-              >
-                <Twitter className="h-5 w-5" />
-                <span className="sr-only">Twitter</span>
-              </Link>
-              <Link
-                href="#"
-                className="text-zinc-400 hover:text-zinc-900 transition-colors"
-              >
-                <Github className="h-5 w-5" />
-                <span className="sr-only">GitHub</span>
-              </Link>
-              <Link
-                href="#"
-                className="text-zinc-400 hover:text-zinc-900 transition-colors"
-              >
-                <Linkedin className="h-5 w-5" />
-                <span className="sr-only">LinkedIn</span>
-              </Link>
-              <Link
-                href="#"
-                className="text-zinc-400 hover:text-zinc-900 transition-colors"
-              >
-                <Instagram className="h-5 w-5" />
-                <span className="sr-only">Instagram</span>
-              </Link>
-            </div>
             <p className="text-sm text-gray-500">
               &copy; {currentYear} .note. All rights reserved.
             </p>

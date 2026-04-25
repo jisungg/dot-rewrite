@@ -198,7 +198,7 @@ export default function Notes({
         );
       } else if (!final.allDone) {
         toast(
-          "Still running in the background — refresh in a minute.",
+          "Still running in the background. Refresh in a minute.",
           { id: toastId },
         );
       } else {

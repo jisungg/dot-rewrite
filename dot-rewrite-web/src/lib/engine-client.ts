@@ -1,3 +1,5 @@
+import { handleQuotaResponse } from "@/lib/quota-toast";
+
 export type EngineStartResponse = {
   ok: boolean;
   started?: string[];
@@ -33,6 +35,7 @@ export async function startEngineForSpaces(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ spaceIds }),
   });
+  handleQuotaResponse(res, "Engine analysis");
   return (await res.json()) as EngineStartResponse;
 }
 

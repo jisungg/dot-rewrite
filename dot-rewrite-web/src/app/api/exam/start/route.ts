@@ -6,6 +6,8 @@ import type { ExamQuestion, Note } from "@/data/types";
 import { completeJson } from "@/lib/llm-backend";
 import { GROUNDING_RULES } from "@/lib/llm-grounding";
 import { rateLimit, maybeSweep } from "@/lib/api/rate-limit";
+import { enforceQuota } from "@/lib/api/quota";
+import { HttpError } from "@/lib/api/validate";
 
 // Generate an exam pack from a chosen subset of notes in a space, then
 // persist a session row that the UI uses for the timer + answer storage.
@@ -117,6 +119,17 @@ export async function POST(req: Request) {
       { error: "rate_limited", detail: `Try again in ${rl.retryAfter}s.` },
       { status: 429, headers: { "retry-after": String(rl.retryAfter) } },
     );
+  }
+  try {
+    await enforceQuota(supabase, user.id, "exam.start");
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 429) {
+      return new NextResponse(err.message, {
+        status: 429,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    throw err;
   }
 
   // Confirm the space belongs to the user.
