@@ -284,6 +284,91 @@ CREATE TABLE IF NOT EXISTS space_profiles (
 );
 
 -- ============================================================
+-- Nexus graph intelligence layer.
+-- See web migration 20260425000000_nexus_intelligence.sql for the
+-- canonical RLS + RPC definitions. Engine creates only the tables.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS note_spans (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    space_id        uuid NOT NULL,
+    note_id         uuid NOT NULL,
+    kind            text NOT NULL,
+    depth           int  NOT NULL DEFAULT 0,
+    text            text NOT NULL DEFAULT '',
+    char_start      int  NOT NULL DEFAULT 0,
+    char_end        int  NOT NULL DEFAULT 0,
+    parent_span_id  uuid NULL,
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS note_spans_note_idx  ON note_spans(note_id);
+CREATE INDEX IF NOT EXISTS note_spans_space_idx ON note_spans(space_id);
+
+CREATE TABLE IF NOT EXISTS concept_mentions (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    space_id     uuid NOT NULL,
+    note_id      uuid NOT NULL,
+    span_id      uuid NULL,
+    surface      text NOT NULL,
+    lemma        text NOT NULL,
+    concept_key  text NOT NULL,
+    pos          text NOT NULL DEFAULT '',
+    is_entity    boolean NOT NULL DEFAULT false,
+    ent_label    text NULL
+);
+CREATE INDEX IF NOT EXISTS concept_mentions_key_idx
+    ON concept_mentions(space_id, concept_key);
+CREATE INDEX IF NOT EXISTS concept_mentions_note_idx
+    ON concept_mentions(note_id);
+
+CREATE TABLE IF NOT EXISTS typed_relations (
+    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    space_id         uuid NOT NULL,
+    src_note_id      uuid NULL,
+    dst_note_id      uuid NULL,
+    src_concept_key  text NULL,
+    dst_concept_key  text NULL,
+    relation         text NOT NULL,
+    evidence         text NOT NULL DEFAULT '',
+    source           text NOT NULL,
+    confidence       real NOT NULL DEFAULT 0,
+    created_at       timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS typed_relations_src_idx
+    ON typed_relations(space_id, src_note_id);
+CREATE INDEX IF NOT EXISTS typed_relations_dst_idx
+    ON typed_relations(space_id, dst_note_id);
+CREATE INDEX IF NOT EXISTS typed_relations_kind_idx
+    ON typed_relations(space_id, relation);
+
+CREATE TABLE IF NOT EXISTS note_metrics (
+    space_id       uuid NOT NULL,
+    note_id        uuid NOT NULL,
+    degree         int  NOT NULL DEFAULT 0,
+    pagerank       real NOT NULL DEFAULT 0,
+    betweenness    real NOT NULL DEFAULT 0,
+    is_god_node    boolean NOT NULL DEFAULT false,
+    is_bridge      boolean NOT NULL DEFAULT false,
+    is_orphan      boolean NOT NULL DEFAULT false,
+    is_cut_vertex  boolean NOT NULL DEFAULT false,
+    community_id   text NULL,
+    computed_at    timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (space_id, note_id)
+);
+CREATE INDEX IF NOT EXISTS note_metrics_space_idx ON note_metrics(space_id);
+
+CREATE TABLE IF NOT EXISTS nexus_insights (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    space_id     uuid NOT NULL,
+    kind         text NOT NULL,
+    payload      jsonb NOT NULL DEFAULT '{}'::jsonb,
+    score        real NOT NULL DEFAULT 0,
+    computed_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS nexus_insights_kind_idx
+    ON nexus_insights(space_id, kind, score DESC);
+
+-- ============================================================
 -- Web read access: authenticated role reads rows scoped to spaces it owns.
 -- RLS joins back to public.spaces(user_id) which already has its own RLS.
 -- Engine writes via service-role DB URL, so RLS does not block the engine.

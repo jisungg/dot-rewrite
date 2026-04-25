@@ -46,6 +46,14 @@ from ..diagnose import (
 )
 from ..drift import collect as drift_collect
 from ..embed import encode as embed_encode, semantic_graph as sem_graph
+from ..extract import (
+    centrality as nexus_centrality,
+    concept_extract as nexus_concepts,
+    insights as nexus_insights_mod,
+    markdown_ast as nexus_ast,
+    relation_llm as nexus_relation_llm,
+    relation_spacy as nexus_relation_spacy,
+)
 from ..llm import labeler as llm_labeler
 from ..explain import (
     explain_confusion,
@@ -144,6 +152,22 @@ def main() -> None:
             )
             store_write.replace_ungrouped_notes(
                 conn, args.space_id, result["ungrouped_notes"],
+            )
+            # Nexus intelligence layer: persist deep-extraction outputs.
+            store_write.replace_note_spans(
+                conn, args.space_id, result.get("nexus_spans", []),
+            )
+            store_write.replace_concept_mentions(
+                conn, args.space_id, result.get("nexus_mentions", []),
+            )
+            store_write.replace_typed_relations(
+                conn, args.space_id, result.get("nexus_relations", []),
+            )
+            store_write.replace_note_metrics(
+                conn, args.space_id, result.get("nexus_metrics", []),
+            )
+            store_write.replace_nexus_insights(
+                conn, args.space_id, result.get("nexus_insights", []),
             )
             marked = store_write.mark_notes_processed(
                 conn, args.space_id, started_at=run.started_at,
@@ -345,6 +369,49 @@ def run_analysis(
 
     for t, members in zip(topics, communities_vertex):
         t.structural_certainty = diag_conf.topic_structural_certainty(g, members)
+
+    # ---------- Nexus intelligence extraction (deep AST + concepts + relations + roles) ----------
+    nexus_spans = _stage(
+        "nexus_ast",
+        lambda: nexus_ast.extract_all(notes),
+        [],
+    )
+    nexus_mentions = _stage(
+        "nexus_concepts",
+        lambda: nexus_concepts.extract_for_spans(nexus_spans) if nexus_spans else [],
+        [],
+    )
+    nexus_relations_spacy = _stage(
+        "nexus_relations_spacy",
+        lambda: nexus_relation_spacy.extract_relations(notes, nexus_spans, nexus_mentions)
+        if nexus_spans
+        else [],
+        [],
+    )
+    nexus_metrics = _stage(
+        "nexus_centrality",
+        lambda: nexus_centrality.compute_metrics(notes, semantic_edges, semantic_clusters),
+        [],
+    )
+    nexus_relations_llm = _stage(
+        "nexus_relations_llm",
+        lambda: nexus_relation_llm.extract_relations(notes, semantic_edges, nexus_metrics),
+        [],
+    )
+    nexus_relations_all: list = list(nexus_relations_spacy) + list(nexus_relations_llm)
+    space_id_for_insights = notes[0].space_id if notes else ""
+    nexus_insight_cards = _stage(
+        "nexus_insights",
+        lambda: nexus_insights_mod.materialize(
+            space_id=space_id_for_insights,
+            notes=notes,
+            semantic_clusters=semantic_clusters,
+            metrics=nexus_metrics,
+            relations=nexus_relations_all,
+            mentions=nexus_mentions,
+        ) if space_id_for_insights else [],
+        [],
+    )
 
     # diagnose
     diag = _stage("diagnose",
@@ -548,6 +615,12 @@ def run_analysis(
         "degraded_stages": degraded,
         "fused_map": fused_map,
         "graph": g,
+        # Nexus intelligence artifacts (used by pipeline writer + tests).
+        "nexus_spans": nexus_spans,
+        "nexus_mentions": nexus_mentions,
+        "nexus_relations": nexus_relations_all,
+        "nexus_metrics": nexus_metrics,
+        "nexus_insights": nexus_insight_cards,
     }
 
 
@@ -655,6 +728,8 @@ def _empty_result(notes, health=None, profile=None):
         "surfaced_counts": {}, "suppressed_counts": {}, "explanations": [],
         "metrics": RunMetrics(), "stage_timings_ms": {}, "degraded_stages": [],
         "fused_map": {}, "graph": None,
+        "nexus_spans": [], "nexus_mentions": [], "nexus_relations": [],
+        "nexus_metrics": [], "nexus_insights": [],
     }
 
 

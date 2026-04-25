@@ -245,6 +245,105 @@ class HierarchyPath:
     path: list[str]
 
 
+class SpanKind(str, Enum):
+    HEADING = "heading"
+    PARAGRAPH = "paragraph"
+    LIST_ITEM = "list_item"
+    CODE = "code"
+    MATH = "math"
+    LINK = "link"
+    QUOTE = "quote"
+    CALLOUT = "callout"
+
+
+@dataclass
+class NoteSpan:
+    """Markdown-AST span extracted from a note's raw text."""
+    space_id: str
+    note_id: str
+    kind: SpanKind
+    depth: int
+    text: str
+    char_start: int
+    char_end: int
+    parent_span_id: str | None = None
+    id: str | None = None  # populated post-insert / pre-write
+
+
+@dataclass
+class ConceptMention:
+    """Lemmatized noun-phrase or named entity mention inside a span."""
+    space_id: str
+    note_id: str
+    span_id: str | None
+    surface: str
+    lemma: str
+    concept_key: str          # lower(NFKC(lemma)), alnum-stripped boundary
+    pos: str = ""
+    is_entity: bool = False
+    ent_label: str | None = None
+
+
+class RelationKind(str, Enum):
+    CAUSES = "causes"
+    DEPENDS_ON = "depends_on"
+    CONTRADICTS = "contradicts"
+    ELABORATES = "elaborates"
+    DEFINES = "defines"
+    EXEMPLIFIES = "exemplifies"
+    IS_A = "is_a"
+    PART_OF = "part_of"
+
+
+@dataclass
+class TypedRelation:
+    """A typed edge between two notes (or two concepts)."""
+    space_id: str
+    relation: RelationKind
+    source: str               # 'spacy' | 'llm'
+    confidence: float
+    src_note_id: str | None = None
+    dst_note_id: str | None = None
+    src_concept_key: str | None = None
+    dst_concept_key: str | None = None
+    evidence: str = ""
+
+
+@dataclass
+class NoteMetric:
+    """Per-note centrality + role flags emitted by the centrality stage."""
+    space_id: str
+    note_id: str
+    degree: int = 0
+    pagerank: float = 0.0
+    betweenness: float = 0.0
+    is_god_node: bool = False
+    is_bridge: bool = False
+    is_orphan: bool = False
+    is_cut_vertex: bool = False
+    community_id: str | None = None
+
+
+class InsightKind(str, Enum):
+    BRIDGE = "bridge"
+    GOD = "god"
+    ORPHAN = "orphan"
+    CONTRADICTION = "contradiction"
+    CHAIN = "chain"
+    REACH = "reach"
+    EMERGING = "emerging"
+
+
+@dataclass
+class NexusInsight:
+    """Pre-materialized insight card for the Nexus tab."""
+    space_id: str
+    kind: InsightKind
+    payload: dict
+    score: float
+    id: str | None = None
+
+
 @dataclass
 class AnalysisRun:
     id: str

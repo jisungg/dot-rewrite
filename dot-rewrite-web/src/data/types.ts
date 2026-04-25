@@ -297,6 +297,141 @@ export type SpaceRelationships = {
   prereqEdges: StudyStateEdgeRow[];
 };
 
+// ============================================================
+// Nexus intelligence layer (engine-owned, RLS-scoped via spaces)
+// ============================================================
+
+export type NoteMetricsRow = {
+  space_id: string;
+  note_id: string;
+  degree: number;
+  pagerank: number;
+  betweenness: number;
+  is_god_node: boolean;
+  is_bridge: boolean;
+  is_orphan: boolean;
+  is_cut_vertex: boolean;
+  community_id: string | null;
+};
+
+export type TypedRelationKind =
+  | "causes"
+  | "depends_on"
+  | "contradicts"
+  | "elaborates"
+  | "defines"
+  | "exemplifies"
+  | "is_a"
+  | "part_of";
+
+export type TypedRelationRow = {
+  id: string;
+  space_id: string;
+  src_note_id: string | null;
+  dst_note_id: string | null;
+  src_concept_key: string | null;
+  dst_concept_key: string | null;
+  relation: TypedRelationKind;
+  evidence: string;
+  source: "spacy" | "llm";
+  confidence: number;
+  created_at: string;
+};
+
+export type ConceptMentionRow = {
+  id: string;
+  space_id: string;
+  note_id: string;
+  span_id: string | null;
+  surface: string;
+  lemma: string;
+  concept_key: string;
+  pos: string;
+  is_entity: boolean;
+  ent_label: string | null;
+};
+
+export type NexusInsightKind =
+  | "bridge"
+  | "god"
+  | "orphan"
+  | "contradiction"
+  | "chain"
+  | "reach"
+  | "emerging";
+
+export type NexusInsight = {
+  id: string;
+  space_id: string;
+  kind: NexusInsightKind;
+  payload: Record<string, unknown>;
+  score: number;
+  computed_at: string;
+};
+
+export type NexusSnapshotNote = {
+  id: string;
+  space_id: string;
+  title: string;
+  tags: string[];
+};
+
+export type NexusSnapshotEdge = {
+  space_id: string;
+  src_note_id: string;
+  dst_note_id: string;
+  similarity: number;
+  mutual: boolean;
+};
+
+export type NexusSnapshotPrereqEdge = {
+  space_id: string;
+  src_node_id: string;
+  dst_node_id: string;
+  kind: string;
+  weight: number;
+};
+
+export type NexusSnapshotConfusionPair = {
+  space_id: string;
+  topic_a: string;
+  topic_b: string;
+  score: number;
+};
+
+export type NexusSnapshotCluster = {
+  id: string;
+  space_id: string;
+  stable_id: string | null;
+  label: string | null;
+  keywords: string[];
+  note_ids: string[];
+  parent_topic: string | null;
+  hierarchy_path: string[];
+};
+
+export type NexusSnapshot = {
+  notes: NexusSnapshotNote[];
+  semantic_edges: NexusSnapshotEdge[];
+  prereq_edges: NexusSnapshotPrereqEdge[];
+  confusion_pairs: NexusSnapshotConfusionPair[];
+  semantic_clusters: NexusSnapshotCluster[];
+  note_metrics: NoteMetricsRow[];
+  insights_top: NexusInsight[];
+  computed_at: string;
+};
+
+export const EMPTY_NEXUS_SNAPSHOT: NexusSnapshot = {
+  notes: [],
+  semantic_edges: [],
+  prereq_edges: [],
+  confusion_pairs: [],
+  semantic_clusters: [],
+  note_metrics: [],
+  insights_top: [],
+  computed_at: "",
+};
+
 export const AgentInformation = {
   name: "Dot",
   id: "dot",

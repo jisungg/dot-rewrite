@@ -16,6 +16,10 @@ import {
   Link2,
   FolderTree,
   HelpCircle,
+  Crown,
+  Workflow,
+  ScanSearch,
+  Waypoints,
 } from "lucide-react";
 
 import type {
@@ -25,9 +29,16 @@ import type {
   SemanticClusterRow,
   TopicHierarchyPathRow,
   UngroupedNoteRow,
+  TypedRelationRow,
+  TypedRelationKind,
+  NexusInsight,
 } from "@/data/types";
 import { fetchSpaceRelationships } from "@/utils/supabase/queries";
 import { useEngineUpdates } from "@/lib/engine-events";
+import {
+  useNexusSnapshot,
+  useTypedRelations,
+} from "@/lib/use-nexus-snapshot";
 
 type TreeNode = {
   name: string;
@@ -145,6 +156,12 @@ export default function SpaceRelationships({
     }
   });
 
+  // Nexus intelligence layer (god-nodes, typed relations, insights),
+  // scoped to this single space.
+  const spaceIds = useMemo(() => [focusedSpace.id], [focusedSpace.id]);
+  const { snapshot: nexus, status: nexusStatus } = useNexusSnapshot(spaceIds);
+  const typedRelationsState = useTypedRelations(spaceIds, true);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -199,18 +216,57 @@ export default function SpaceRelationships({
     return buildTree(data.hierarchyPaths, data.semanticClusters);
   }, [data]);
 
-  const foundational = useMemo(
-    () => (data?.diagnostics ?? []).filter((d) => d.is_foundational),
-    [data],
+  // Prefer note_metrics flags (richer Nexus layer) when available;
+  // fall back to legacy note_diagnostics flags so the UI still renders
+  // before the new pipeline has run.
+  const anchors = useMemo(() => {
+    if (nexus.note_metrics.length > 0) {
+      return nexus.note_metrics.filter((m) => m.is_god_node);
+    }
+    return (data?.diagnostics ?? []).filter((d) => d.is_foundational);
+  }, [nexus.note_metrics, data]);
+
+  const bridges = useMemo(() => {
+    if (nexus.note_metrics.length > 0) {
+      return nexus.note_metrics.filter((m) => m.is_bridge);
+    }
+    return (data?.diagnostics ?? []).filter((d) => d.is_bridge);
+  }, [nexus.note_metrics, data]);
+
+  const orphans = useMemo(() => {
+    if (nexus.note_metrics.length > 0) {
+      return nexus.note_metrics.filter((m) => m.is_orphan);
+    }
+    return (data?.diagnostics ?? []).filter((d) => d.is_isolated);
+  }, [nexus.note_metrics, data]);
+
+  const cutVertices = useMemo(
+    () => nexus.note_metrics.filter((m) => m.is_cut_vertex),
+    [nexus.note_metrics],
   );
-  const bridges = useMemo(
-    () => (data?.diagnostics ?? []).filter((d) => d.is_bridge),
-    [data],
-  );
-  const orphans = useMemo(
-    () => (data?.diagnostics ?? []).filter((d) => d.is_isolated),
-    [data],
-  );
+
+  const typedRelations = typedRelationsState.data ?? [];
+  const typedByKind = useMemo(() => {
+    const m = new Map<TypedRelationKind, TypedRelationRow[]>();
+    for (const r of typedRelations) {
+      const arr = m.get(r.relation) ?? [];
+      arr.push(r);
+      m.set(r.relation, arr);
+    }
+    for (const arr of m.values())
+      arr.sort((a, b) => b.confidence - a.confidence);
+    return m;
+  }, [typedRelations]);
+
+  const insightsByKind = useMemo(() => {
+    const m = new Map<NexusInsight["kind"], NexusInsight[]>();
+    for (const i of nexus.insights_top) {
+      const arr = m.get(i.kind) ?? [];
+      arr.push(i);
+      m.set(i.kind, arr);
+    }
+    return m;
+  }, [nexus.insights_top]);
   const prereqGaps = useMemo(
     () =>
       [...(data?.diagnostics ?? [])]
@@ -388,14 +444,18 @@ export default function SpaceRelationships({
               )}
             </Section>
 
-            <Section icon={Star} title={`Foundational (${foundational.length})`}>
-              {foundational.length === 0 ? (
-                <Empty label="No foundational notes flagged." />
+            <Section icon={Crown} title={`Anchors / God-nodes (${anchors.length})`}>
+              {anchors.length === 0 ? (
+                <Empty label="No anchor notes — engine analysis not run yet." />
               ) : (
-                <NoteList
-                  rows={foundational}
+                <MetricNoteList
+                  rows={anchors}
                   noteById={noteById}
-                  metric={null}
+                  format={(r) =>
+                    "pagerank" in r
+                      ? `pr ${r.pagerank.toFixed(3)} · deg ${r.degree}`
+                      : null
+                  }
                 />
               )}
             </Section>
@@ -404,7 +464,13 @@ export default function SpaceRelationships({
               {bridges.length === 0 ? (
                 <Empty label="No bridge notes detected." />
               ) : (
-                <NoteList rows={bridges} noteById={noteById} metric={null} />
+                <MetricNoteList
+                  rows={bridges}
+                  noteById={noteById}
+                  format={(r) =>
+                    "betweenness" in r ? `bw ${r.betweenness.toFixed(3)}` : null
+                  }
+                />
               )}
             </Section>
 
@@ -415,7 +481,28 @@ export default function SpaceRelationships({
               {orphans.length === 0 ? (
                 <Empty label="No orphan notes." />
               ) : (
-                <NoteList rows={orphans} noteById={noteById} metric={null} />
+                <MetricNoteList
+                  rows={orphans}
+                  noteById={noteById}
+                  format={() => null}
+                />
+              )}
+            </Section>
+
+            <Section
+              icon={Waypoints}
+              title={`Cut vertices (${cutVertices.length})`}
+            >
+              {cutVertices.length === 0 ? (
+                <Empty label="No fragility points — graph stays connected without any single note." />
+              ) : (
+                <MetricNoteList
+                  rows={cutVertices}
+                  noteById={noteById}
+                  format={(r) =>
+                    "betweenness" in r ? `bw ${r.betweenness.toFixed(3)}` : null
+                  }
+                />
               )}
             </Section>
 
@@ -473,6 +560,112 @@ export default function SpaceRelationships({
                       </span>
                     </li>
                   ))}
+                </ul>
+              )}
+            </Section>
+
+            <Section
+              icon={Workflow}
+              title={`Typed relations (${typedRelations.length})`}
+            >
+              {typedRelationsState.status === "loading" ? (
+                <Empty label="Loading typed relations…" />
+              ) : typedRelations.length === 0 ? (
+                <Empty label="No typed relations extracted yet." />
+              ) : (
+                <ul className="space-y-2 text-[11px]">
+                  {[...typedByKind.entries()].map(([kind, rows]) => (
+                    <li key={kind}>
+                      <div className="text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-0.5">
+                        {kind.replace("_", " ")} · {rows.length}
+                      </div>
+                      <ul className="space-y-0.5">
+                        {rows.slice(0, 4).map((r) => (
+                          <li
+                            key={r.id}
+                            className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-300"
+                            title={r.evidence || undefined}
+                          >
+                            <span className="truncate flex-1 min-w-0">
+                              {noteById.get(r.src_note_id ?? "")?.title ??
+                                (r.src_note_id ?? "?").slice(0, 6)}
+                            </span>
+                            <span className="text-zinc-400 flex-shrink-0">→</span>
+                            <span className="truncate flex-1 min-w-0">
+                              {noteById.get(r.dst_note_id ?? "")?.title ??
+                                (r.dst_note_id ?? "?").slice(0, 6)}
+                            </span>
+                            <span className="ml-auto text-[10px] text-zinc-400 flex-shrink-0">
+                              {(r.confidence * 100).toFixed(0)}%
+                              <span className="ml-1 opacity-60">{r.source}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+
+            <Section
+              icon={Sparkles}
+              title={`Nexus insights (${nexus.insights_top.length})`}
+            >
+              {nexusStatus === "loading" ? (
+                <Empty label="Loading insights…" />
+              ) : nexus.insights_top.length === 0 ? (
+                <Empty label="No surfaced insights yet — re-run engine." />
+              ) : (
+                <ul className="space-y-2 text-[11px]">
+                  {[...insightsByKind.entries()].map(([kind, items]) => (
+                    <li key={kind}>
+                      <div className="text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-0.5">
+                        {kind} · {items.length}
+                      </div>
+                      <ul className="space-y-0.5 text-zinc-600 dark:text-zinc-300">
+                        {items.slice(0, 3).map((i) => (
+                          <li key={i.id} className="truncate">
+                            {summarizeInsight(i)}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+
+            <Section
+              icon={ScanSearch}
+              title={`Concept reach (${(insightsByKind.get("reach") ?? []).length})`}
+            >
+              {(insightsByKind.get("reach") ?? []).length === 0 ? (
+                <Empty label="No cross-community concepts." />
+              ) : (
+                <ul className="space-y-1 text-[11px] text-zinc-700 dark:text-zinc-200">
+                  {(insightsByKind.get("reach") ?? []).slice(0, 8).map((i) => {
+                    const p = i.payload || {};
+                    const surface =
+                      typeof p["surface"] === "string"
+                        ? (p["surface"] as string)
+                        : "";
+                    const comms = Array.isArray(p["communities"])
+                      ? (p["communities"] as unknown[]).length
+                      : 0;
+                    const noteCount =
+                      typeof p["note_count"] === "number"
+                        ? (p["note_count"] as number)
+                        : 0;
+                    return (
+                      <li key={i.id} className="flex items-center gap-2 truncate">
+                        <span className="truncate font-medium">{surface || "concept"}</span>
+                        <span className="ml-auto text-[10px] text-zinc-400 dark:text-zinc-500 flex-shrink-0">
+                          {comms} communities · {noteCount} notes
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </Section>
@@ -670,6 +863,87 @@ function Empty({ label }: { label: string }) {
       {label}
     </div>
   );
+}
+
+type NoteRowLike =
+  | { note_id: string; prereq_gap: number; integration: number }
+  | {
+      note_id: string;
+      pagerank: number;
+      betweenness: number;
+      degree: number;
+    };
+
+function MetricNoteList({
+  rows,
+  noteById,
+  format,
+}: {
+  rows: NoteRowLike[];
+  noteById: Map<string, Note>;
+  format: (r: NoteRowLike) => string | null;
+}) {
+  return (
+    <ul className="space-y-1">
+      {rows.slice(0, 12).map((r) => {
+        const n = noteById.get(r.note_id);
+        const label = format(r);
+        return (
+          <li
+            key={r.note_id}
+            className="flex items-center justify-between gap-2 text-[11px] text-zinc-700 dark:text-zinc-200"
+          >
+            <span className="truncate">
+              {n?.title || r.note_id.slice(0, 8)}
+            </span>
+            {label && (
+              <span className="text-[10px] text-zinc-400 dark:text-zinc-500 flex-shrink-0">
+                {label}
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function summarizeInsight(i: NexusInsight): string {
+  const p = i.payload || {};
+  switch (i.kind) {
+    case "bridge":
+    case "god":
+      return typeof p["title"] === "string" ? (p["title"] as string) : "untitled";
+    case "orphan": {
+      const c = typeof p["count"] === "number" ? (p["count"] as number) : 0;
+      return `${c} disconnected note${c === 1 ? "" : "s"}`;
+    }
+    case "contradiction": {
+      const a =
+        typeof p["src_title"] === "string" ? (p["src_title"] as string) : "?";
+      const b =
+        typeof p["dst_title"] === "string" ? (p["dst_title"] as string) : "?";
+      return `${a} ↔ ${b}`;
+    }
+    case "chain": {
+      const t = Array.isArray(p["titles"]) ? (p["titles"] as string[]) : [];
+      return t.length ? t.join(" → ") : "dependency chain";
+    }
+    case "reach": {
+      const surface =
+        typeof p["surface"] === "string" ? (p["surface"] as string) : "concept";
+      const c = Array.isArray(p["communities"])
+        ? (p["communities"] as unknown[]).length
+        : 0;
+      return `“${surface}” spans ${c} communities`;
+    }
+    case "emerging":
+      return typeof p["label"] === "string"
+        ? (p["label"] as string)
+        : "new cluster";
+    default:
+      return "";
+  }
 }
 
 function NoteList({

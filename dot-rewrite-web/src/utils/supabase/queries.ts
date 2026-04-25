@@ -20,6 +20,11 @@ import {
   type SemanticClusterRow,
   type TopicHierarchyPathRow,
   type UngroupedNoteRow,
+  type NexusSnapshot,
+  type NexusInsight,
+  type TypedRelationRow,
+  type ConceptMentionRow,
+  EMPTY_NEXUS_SNAPSHOT,
   DEFAULT_PREFERENCES,
 } from "@/data/types";
 import { revalidatePath } from "next/cache";
@@ -764,4 +769,153 @@ export async function fetchProfileByEmail(
   if (error) throw new Error("Error fetching profile: " + error.message);
   if (!data) return null;
   return hydrateProfile(data as Record<string, unknown>);
+}
+
+// ============================================================
+// Nexus intelligence — single-call snapshot RPC + lazy detail
+// ============================================================
+
+function isNexusSnapshot(value: unknown): value is NexusSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    Array.isArray(v["notes"]) &&
+    Array.isArray(v["semantic_edges"]) &&
+    Array.isArray(v["prereq_edges"]) &&
+    Array.isArray(v["confusion_pairs"]) &&
+    Array.isArray(v["semantic_clusters"]) &&
+    Array.isArray(v["note_metrics"]) &&
+    Array.isArray(v["insights_top"])
+  );
+}
+
+export async function fetchNexusSnapshot(
+  spaceIds: string[],
+): Promise<NexusSnapshot> {
+  if (spaceIds.length === 0) return EMPTY_NEXUS_SNAPSHOT;
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("nexus_snapshot", {
+    p_space_ids: spaceIds,
+  });
+  if (error) {
+    console.error("fetchNexusSnapshot RPC failed:", error.code, error.message);
+    // Common case: migration not applied yet (function does not exist).
+    // Fall back to the per-table fetches so the graph still renders.
+    return fetchNexusSnapshotFallback(spaceIds);
+  }
+  if (!isNexusSnapshot(data)) {
+    console.warn("fetchNexusSnapshot: malformed payload", data);
+    return fetchNexusSnapshotFallback(spaceIds);
+  }
+  return data;
+}
+
+// Best-effort fallback — used when the nexus_snapshot RPC is missing
+// (migration not applied) or returns a malformed payload. Pulls the
+// same shape directly from the underlying tables so existing notes
+// still render even before re-analysis populates note_metrics /
+// nexus_insights.
+async function fetchNexusSnapshotFallback(
+  spaceIds: string[],
+): Promise<NexusSnapshot> {
+  const supabase = await createClient();
+  const [notesRes, semanticRes, prereqRes, confusionRes, clustersRes] =
+    await Promise.all([
+      supabase
+        .from("notes")
+        .select("id, space_id, title, tags")
+        .in("space_id", spaceIds)
+        .eq("archived", false),
+      supabase
+        .from("note_semantic_edges")
+        .select("space_id, src_note_id, dst_note_id, similarity, mutual")
+        .in("space_id", spaceIds),
+      supabase
+        .from("study_state_edges")
+        .select("space_id, src_node_id, dst_node_id, kind, weight")
+        .in("space_id", spaceIds)
+        .eq("kind", "prerequisite"),
+      supabase
+        .from("confusion_pairs")
+        .select("space_id, topic_a, topic_b, score")
+        .in("space_id", spaceIds),
+      supabase
+        .from("semantic_topic_clusters")
+        .select(
+          "id, space_id, stable_id, label, keywords, note_ids, parent_topic, hierarchy_path",
+        )
+        .in("space_id", spaceIds),
+    ]);
+
+  const noteRows = (notesRes.data ?? []) as Array<{
+    id: string;
+    space_id: string;
+    title: string | null;
+    tags: string[] | null;
+  }>;
+
+  return {
+    notes: noteRows.map((n) => ({
+      id: n.id,
+      space_id: n.space_id,
+      title: n.title ?? "",
+      tags: n.tags ?? [],
+    })),
+    semantic_edges: (semanticRes.data ?? []) as NexusSnapshot["semantic_edges"],
+    prereq_edges: (prereqRes.data ?? []) as NexusSnapshot["prereq_edges"],
+    confusion_pairs: (confusionRes.data ?? []) as NexusSnapshot["confusion_pairs"],
+    semantic_clusters: (clustersRes.data ?? []) as NexusSnapshot["semantic_clusters"],
+    note_metrics: [],
+    insights_top: [],
+    computed_at: new Date().toISOString(),
+  };
+}
+
+export async function fetchTypedRelations(
+  spaceIds: string[],
+  relation: string | null = null,
+): Promise<TypedRelationRow[]> {
+  if (spaceIds.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("nexus_typed_relations", {
+    p_space_ids: spaceIds,
+    p_relation: relation,
+  });
+  if (error) {
+    console.error("fetchTypedRelations error:", error.message);
+    return [];
+  }
+  return (data ?? []) as TypedRelationRow[];
+}
+
+export async function fetchConceptReach(
+  spaceIds: string[],
+  conceptKey: string,
+): Promise<ConceptMentionRow[]> {
+  if (spaceIds.length === 0 || !conceptKey) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("nexus_concept_reach", {
+    p_space_ids: spaceIds,
+    p_concept_key: conceptKey,
+  });
+  if (error) {
+    console.error("fetchConceptReach error:", error.message);
+    return [];
+  }
+  return (data ?? []) as ConceptMentionRow[];
+}
+
+export async function fetchInsightDetail(
+  insightId: string,
+): Promise<NexusInsight | null> {
+  if (!insightId) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("nexus_insight_detail", {
+    p_insight_id: insightId,
+  });
+  if (error) {
+    console.error("fetchInsightDetail error:", error.message);
+    return null;
+  }
+  return (data as NexusInsight | null) ?? null;
 }

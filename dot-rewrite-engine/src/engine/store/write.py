@@ -18,10 +18,14 @@ import psycopg
 
 from ..models import (
     AnalysisRun,
+    ConceptMention,
     ConfusionPair,
     DiagnosticResult,
     HierarchyPath,
+    NexusInsight,
     NoteEmbedding,
+    NoteMetric,
+    NoteSpan,
     RankingExplanation,
     RunMetrics,
     SemanticCluster,
@@ -29,6 +33,7 @@ from ..models import (
     SimilarityEdge,
     SpaceProfile,
     TopicCluster,
+    TypedRelation,
     UngroupedNote,
 )
 
@@ -355,6 +360,124 @@ def mark_notes_processed(
     with conn.cursor() as cur:
         cur.execute(sql, tuple(args))
         return cur.rowcount or 0
+
+
+def replace_note_spans(
+    conn: psycopg.Connection, space_id: str, spans: list[NoteSpan]
+) -> None:
+    """Drop all spans for the space; reinsert the fresh batch."""
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM note_spans WHERE space_id = %s", (space_id,))
+        if not spans:
+            return
+        cur.executemany(
+            """
+            INSERT INTO note_spans
+              (id, space_id, note_id, kind, depth, text,
+               char_start, char_end, parent_span_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            [
+                (
+                    s.id, s.space_id, s.note_id, s.kind.value, s.depth,
+                    s.text, s.char_start, s.char_end, s.parent_span_id,
+                )
+                for s in spans
+            ],
+        )
+
+
+def replace_concept_mentions(
+    conn: psycopg.Connection, space_id: str, mentions: list[ConceptMention]
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM concept_mentions WHERE space_id = %s", (space_id,))
+        if not mentions:
+            return
+        cur.executemany(
+            """
+            INSERT INTO concept_mentions
+              (space_id, note_id, span_id, surface, lemma, concept_key,
+               pos, is_entity, ent_label)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            [
+                (
+                    m.space_id, m.note_id, m.span_id, m.surface, m.lemma,
+                    m.concept_key, m.pos, m.is_entity, m.ent_label,
+                )
+                for m in mentions
+            ],
+        )
+
+
+def replace_typed_relations(
+    conn: psycopg.Connection, space_id: str, relations: list[TypedRelation]
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM typed_relations WHERE space_id = %s", (space_id,))
+        if not relations:
+            return
+        cur.executemany(
+            """
+            INSERT INTO typed_relations
+              (space_id, src_note_id, dst_note_id, src_concept_key, dst_concept_key,
+               relation, evidence, source, confidence)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            [
+                (
+                    r.space_id, r.src_note_id, r.dst_note_id,
+                    r.src_concept_key, r.dst_concept_key,
+                    r.relation.value, r.evidence, r.source, float(r.confidence),
+                )
+                for r in relations
+            ],
+        )
+
+
+def replace_note_metrics(
+    conn: psycopg.Connection, space_id: str, metrics: list[NoteMetric]
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM note_metrics WHERE space_id = %s", (space_id,))
+        if not metrics:
+            return
+        cur.executemany(
+            """
+            INSERT INTO note_metrics
+              (space_id, note_id, degree, pagerank, betweenness,
+               is_god_node, is_bridge, is_orphan, is_cut_vertex, community_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            [
+                (
+                    m.space_id, m.note_id, m.degree, float(m.pagerank), float(m.betweenness),
+                    m.is_god_node, m.is_bridge, m.is_orphan, m.is_cut_vertex, m.community_id,
+                )
+                for m in metrics
+            ],
+        )
+
+
+def replace_nexus_insights(
+    conn: psycopg.Connection, space_id: str, insights: list[NexusInsight]
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM nexus_insights WHERE space_id = %s", (space_id,))
+        if not insights:
+            return
+        cur.executemany(
+            """
+            INSERT INTO nexus_insights
+              (space_id, kind, payload, score)
+            VALUES (%s, %s, %s::jsonb, %s)
+            """,
+            [
+                (i.space_id, i.kind.value, json.dumps(i.payload), float(i.score))
+                for i in insights
+            ],
+        )
 
 
 def replace_diagnostics(conn: psycopg.Connection, diag: DiagnosticResult) -> None:
