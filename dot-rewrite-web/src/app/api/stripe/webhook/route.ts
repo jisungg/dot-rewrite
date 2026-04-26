@@ -8,20 +8,21 @@ import { stripe, webhookSecret } from "@/lib/stripe/server";
 // schema, so PostgrestQueryBuilder narrows mutation values to `never`.
 // Cast through unknown to a minimal interface that matches the surface
 // the webhook needs.
+type WriteResult = { error: { message: string; code?: string } | null };
 type Admin = {
   from: (table: string) => {
     update: (vals: Record<string, unknown>) => {
-      eq: (col: string, val: string) => Promise<unknown>;
+      eq: (col: string, val: string) => Promise<WriteResult>;
     };
     upsert: (
       vals: Record<string, unknown>,
       opts: { onConflict: string },
-    ) => Promise<unknown>;
+    ) => Promise<WriteResult>;
     select: (cols: string) => {
       eq: (col: string, val: string) => {
         maybeSingle: () => Promise<{
           data: Record<string, unknown> | null;
-          error: unknown;
+          error: { message: string; code?: string } | null;
         }>;
       };
     };
@@ -29,6 +30,13 @@ type Admin = {
 };
 function admin(): Admin {
   return adminClient() as unknown as Admin;
+}
+
+function assertOk(res: WriteResult, op: string): void {
+  if (res.error) {
+    console.error(`stripe webhook: ${op} failed:`, res.error);
+    throw new Error(`${op}_failed: ${res.error.message}`);
+  }
 }
 
 // Stripe webhook receiver.
@@ -74,6 +82,7 @@ export async function POST(req: Request) {
     // Ack unhandled events so Stripe doesn't retry forever.
     return NextResponse.json({ received: true, ignored: event.type });
   }
+  console.log(`stripe webhook: handling ${event.type} id=${event.id}`);
 
   try {
     switch (event.type) {
@@ -130,7 +139,7 @@ async function onSubscriptionChanged(sub: Stripe.Subscription): Promise<void> {
 async function onSubscriptionDeleted(sub: Stripe.Subscription): Promise<void> {
   const userId = await resolveUserIdFromSubscription(sub);
   if (!userId) return;
-  await admin()
+  const res = await admin()
     .from("subscriptions")
     .update({
       tier: "free",
@@ -140,6 +149,7 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription): Promise<void> {
       updated_at: new Date().toISOString(),
     })
     .eq("user_id", userId);
+  assertOk(res, "downgrade");
 }
 
 async function onPaymentFailed(inv: Stripe.Invoice): Promise<void> {
@@ -154,10 +164,11 @@ async function onPaymentFailed(inv: Stripe.Invoice): Promise<void> {
   const subscriptionId =
     typeof subRef === "string" ? subRef : subRef?.id;
   if (!subscriptionId) return;
-  await admin()
+  const res = await admin()
     .from("subscriptions")
     .update({ status: "past_due", updated_at: new Date().toISOString() })
     .eq("stripe_subscription_id", subscriptionId);
+  assertOk(res, "past_due");
 }
 
 // --------------------------------------------------------------------
@@ -225,7 +236,10 @@ async function upsertSubscription(
       ? new Date(periodEndUnix * 1000).toISOString()
       : null;
 
-  await admin()
+  console.log(
+    `stripe webhook: upserting user=${userId} tier=${tier} status=${status} sub=${sub.id} (stripe_status=${sub.status})`,
+  );
+  const res = await admin()
     .from("subscriptions")
     .upsert(
       {
@@ -239,4 +253,6 @@ async function upsertSubscription(
       },
       { onConflict: "user_id" },
     );
+  assertOk(res, "upsert");
+  console.log(`stripe webhook: upsert ok user=${userId} tier=${tier}`);
 }
