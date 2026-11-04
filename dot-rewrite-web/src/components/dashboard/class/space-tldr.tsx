@@ -86,6 +86,7 @@ export default function SpaceTldr({
   useEffect(() => {
     const c = focusedSpace.summary_cache;
     if (c && typeof c.summary === "string" && c.summary.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- seed/fetch summary on space change
       setState({
         summary: c.summary,
         cached: true,
@@ -139,8 +140,8 @@ export default function SpaceTldr({
   useEffect(() => {
     if (state || loading) return;
     if (userNotes.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- seed/fetch summary on space change
     void load(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedSpace.id, userNotes.length]);
 
   const summaries = useMemo(

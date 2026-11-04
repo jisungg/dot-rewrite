@@ -89,7 +89,6 @@ export default function SettingsPage({
       }
     };
     run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const nameDirty = useMemo(() => {
@@ -177,7 +176,6 @@ export default function SettingsPage({
     return () => {
       if (apiRef) apiRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirty, firstName, lastName, draftPrefs, profile]);
 
   if (loadingProfile) {

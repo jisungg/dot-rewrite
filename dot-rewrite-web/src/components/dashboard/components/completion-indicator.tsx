@@ -53,6 +53,8 @@ const icons = {
   pending: <Clock className="h-4 w-4 shrink-0" />,
 };
 
+const noopSubscribe = () => () => {};
+
 export function CompletionIndicator({
   className,
   variant,
@@ -65,11 +67,12 @@ export function CompletionIndicator({
   children,
   ...props
 }: CompletionIndicatorProps) {
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
+  // false during SSR / hydration, true on the client afterwards.
+  const mounted = React.useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
 
   if (!mounted) return null;
 

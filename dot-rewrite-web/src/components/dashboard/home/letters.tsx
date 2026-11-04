@@ -124,6 +124,7 @@ export default function Letters({ allSpaces }: { allSpaces: Space[] }) {
   // Load history for active letter.
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch
     setLoadingHistory(true);
     setHistory([]);
     setStreamBuffer("");

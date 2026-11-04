@@ -64,6 +64,19 @@ function sanitizeOutline(value: unknown): OutlineHeading[] {
   return out;
 }
 
+function seedFromCache(note: Note | null): SummaryState | null {
+  const cache = note?.cache;
+  if (!cache || typeof cache.summary !== "string" || cache.summary.length === 0)
+    return null;
+  return {
+    summary: cache.summary,
+    outline: sanitizeOutline(cache.outline),
+    cached: true,
+    fallback: false,
+    updated_at: cache.updated_at ?? null,
+  };
+}
+
 type SummaryState = {
   summary: string;
   outline: OutlineHeading[];
@@ -84,35 +97,29 @@ export default function NoteView({
   const [activeTab, setActiveTab] = useState<"content" | "outline" | "tldr">(
     "content",
   );
-  const [state, setState] = useState<SummaryState | null>(null);
+  const [state, setState] = useState<SummaryState | null>(() =>
+    seedFromCache(note),
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset state when switching notes.
-  useEffect(() => {
-    setState(null);
-    setError(null);
-    setActiveTab("content");
-  }, [note?.id]);
-
-  // Seed from the note's cached summary if present.
-  useEffect(() => {
-    if (!note) return;
-    const cache = note.cache;
-    if (
-      cache &&
-      typeof cache.summary === "string" &&
-      cache.summary.length > 0
-    ) {
-      setState({
-        summary: cache.summary,
-        outline: sanitizeOutline(cache.outline),
-        cached: true,
-        fallback: false,
-        updated_at: cache.updated_at ?? null,
-      });
+  // Reset when switching notes; re-seed when the note's cache changes.
+  const [prevNote, setPrevNote] = useState({
+    id: note?.id,
+    cache: note?.cache,
+  });
+  if (prevNote.id !== note?.id || prevNote.cache !== note?.cache) {
+    const switched = prevNote.id !== note?.id;
+    setPrevNote({ id: note?.id, cache: note?.cache });
+    const seeded = seedFromCache(note);
+    if (switched) {
+      setState(seeded);
+      setError(null);
+      setActiveTab("content");
+    } else if (seeded) {
+      setState(seeded);
     }
-  }, [note?.id, note?.cache]);
+  }
 
   const load = useCallback(
     async (force = false) => {
@@ -143,6 +150,7 @@ export default function NoteView({
     if (!note) return;
     if (activeTab === "content") return;
     if (state || loading) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- lazy data fetch
     void load(false);
   }, [activeTab, note, state, loading, load]);
 

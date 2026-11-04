@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -88,8 +88,6 @@ export default function Notes({
   onProcessed?: () => Promise<void> | void;
 }) {
   const [notes, setNotes] = useState(allNotes);
-  const [filteredAndSortedNotes, setFilteredAndSortedNotes] =
-    useState<Note[]>(allNotes);
   const [searchQuery, setSearchQuery] = useState("");
   const [spaceFilter, setSpaceFilter] = useState("All");
   const [tagFilter, setTagFilter] = useState("All");
@@ -243,7 +241,7 @@ export default function Notes({
     }
   };
 
-  useEffect(() => {
+  const filteredAndSortedNotes = useMemo(() => {
     let filtered = [...notes];
 
     if (searchQuery) {
@@ -262,12 +260,16 @@ export default function Notes({
       filtered = filtered.filter((note) => note.tags.includes(tagFilter));
     }
 
-    filtered = sortNotes(filtered, sortOrder);
-
-    setFilteredAndSortedNotes(filtered);
-    setCurrentPage(1);
+    return sortNotes(filtered, sortOrder);
     // mapSpaceIdtoSpaceName uses allSpaces; included via allSpaces dep
   }, [notes, searchQuery, spaceFilter, tagFilter, sortOrder, allSpaces]);
+
+  // Jump back to page 1 whenever the result set changes.
+  const [prevFiltered, setPrevFiltered] = useState(filteredAndSortedNotes);
+  if (prevFiltered !== filteredAndSortedNotes) {
+    setPrevFiltered(filteredAndSortedNotes);
+    setCurrentPage(1);
+  }
 
   const indexOfLastNote = currentPage * NOTES_PER_PAGE;
   const indexOfFirstNote = indexOfLastNote - NOTES_PER_PAGE;

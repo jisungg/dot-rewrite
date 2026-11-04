@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, type MutableRefObject } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, type MutableRefObject } from "react";
 import {
   ChevronDown,
   Info,
@@ -347,12 +347,12 @@ export default function Editor({
 }) {
   const initialSpace = spaceLinked ?? allSpaces[0];
 
-  const initialSnapshot = useRef({
+  const [initialSnapshot, setInitialSnapshot] = useState(() => ({
     content: noteContent?.content ?? "",
     title: noteContent?.title ?? "Untitled Note",
     tags: noteContent?.tags ?? [],
     spaceId: (spaceLinked ?? allSpaces[0])?.id ?? "",
-  });
+  }));
 
   const [note, setNote] = useState<string>(noteContent?.content ?? "");
   const [saved, setSaved] = useState<boolean>(true);
@@ -360,7 +360,6 @@ export default function Editor({
     noteContent?.title ?? "Untitled Note",
   );
   const [isTitleFocused, setIsTitleFocused] = useState(false);
-  const [isTitleDuplicate, setIsTitleDuplicate] = useState(false);
   const [isSpacesOpen, setIsSpacesOpen] = useState(false);
   const [currentSpace, setCurrentSpace] = useState<Space | undefined>(
     initialSpace,
@@ -379,22 +378,14 @@ export default function Editor({
   const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  const checkTitleDuplicate = useCallback(
-    (title: string) => {
-      if (!currentSpace) {
-        setIsTitleDuplicate(false);
-        return;
-      }
-      const lowerTitle = title.toLowerCase();
-      const isDuplicate = allNotes.some(
-        (n) =>
-          n.space_id === currentSpace.id &&
-          n.title.toLowerCase() === lowerTitle,
-      );
-      setIsTitleDuplicate(isDuplicate);
-    },
-    [allNotes, currentSpace],
-  );
+  const isTitleDuplicate = useMemo(() => {
+    if (!currentSpace) return false;
+    const lowerTitle = noteTitle.toLowerCase();
+    return allNotes.some(
+      (n) =>
+        n.space_id === currentSpace.id && n.title.toLowerCase() === lowerTitle,
+    );
+  }, [allNotes, currentSpace, noteTitle]);
 
   useEffect(() => {
     if (!noteContent) {
@@ -402,8 +393,9 @@ export default function Editor({
       const savedTitle = localStorage.getItem("quick-notes-title");
       const savedSpace = localStorage.getItem("quick-notes-space");
       const savedTags = localStorage.getItem("quick-notes-tags");
-      let restoredSpaceId = initialSnapshot.current.spaceId;
-      let restoredTags: string[] = initialSnapshot.current.tags;
+      let restoredSpaceId = initialSnapshot.spaceId;
+      let restoredTags: string[] = initialSnapshot.tags;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate draft from localStorage after mount
       if (savedNotes) setNote(savedNotes);
       if (savedTitle) setNoteTitle(savedTitle);
       if (savedSpace) {
@@ -424,12 +416,12 @@ export default function Editor({
           console.error("Error parsing saved tags", e);
         }
       }
-      initialSnapshot.current = {
+      setInitialSnapshot({
         content: savedNotes ?? "",
         title: savedTitle ?? "Untitled Note",
         tags: restoredTags,
         spaceId: restoredSpaceId,
-      };
+      });
     }
   }, [noteContent]);
 
@@ -447,10 +439,6 @@ export default function Editor({
     };
     fetchAndAssignProfile();
   }, [user]);
-
-  useEffect(() => {
-    checkTitleDuplicate(noteTitle);
-  }, [noteTitle, currentSpace, checkTitleDuplicate]);
 
   const saveNote = useCallback(() => {
     localStorage.setItem("quick-notes", note);
@@ -645,14 +633,14 @@ export default function Editor({
 
   const contentChanged =
     normalizeContent(note) !==
-    normalizeContent(initialSnapshot.current.content);
+    normalizeContent(initialSnapshot.content);
   const titleChanged =
     normalizeTitle(noteTitle) !==
-    normalizeTitle(initialSnapshot.current.title);
+    normalizeTitle(initialSnapshot.title);
   const tagsChanged =
-    JSON.stringify(tags) !== JSON.stringify(initialSnapshot.current.tags);
+    JSON.stringify(tags) !== JSON.stringify(initialSnapshot.tags);
   const spaceChanged =
-    (currentSpace?.id ?? "") !== initialSnapshot.current.spaceId;
+    (currentSpace?.id ?? "") !== initialSnapshot.spaceId;
 
   const dirty =
     !isEffectivelyEmpty &&
@@ -671,24 +659,24 @@ export default function Editor({
       dirty,
       save: async () => {
         await saveToSpace();
-        initialSnapshot.current = {
+        setInitialSnapshot({
           content: note,
           title: noteTitle,
           tags,
           spaceId: currentSpace?.id ?? "",
-        };
+        });
       },
       discard: () => {
-        setNote(initialSnapshot.current.content);
-        setNoteTitle(initialSnapshot.current.title);
-        setTags(initialSnapshot.current.tags);
+        setNote(initialSnapshot.content);
+        setNoteTitle(initialSnapshot.title);
+        setTags(initialSnapshot.tags);
         setSaved(true);
       },
     };
     return () => {
       if (apiRef) apiRef.current = null;
     };
-  }, [apiRef, dirty, note, noteTitle, tags, currentSpace, saveToSpace]);
+  }, [apiRef, dirty, note, noteTitle, tags, currentSpace, saveToSpace, initialSnapshot]);
 
   if (!currentSpace) {
     return (

@@ -54,11 +54,11 @@ export function useNexusSnapshot(spaceIds: string[]): NexusSnapshotState {
       setError(err instanceof Error ? err.message : String(err));
       setStatus("error");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idsKey]);
 
   useEffect(() => {
     cancelledRef.current = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch
     void run();
     return () => {
       cancelledRef.current = true;
@@ -122,7 +122,6 @@ export function useTypedRelations(
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, idsKey]);
 
   return state;
@@ -143,6 +142,7 @@ export function useConceptReach(
 
   useEffect(() => {
     if (!conceptKey || spaceIds.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch
       setState({ data: null, status: "idle", error: null });
       return;
     }
@@ -170,7 +170,6 @@ export function useConceptReach(
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKey]);
 
   return state;
@@ -186,6 +185,7 @@ export function useInsightDetail(insightId: string | null): LazyState<NexusInsig
 
   useEffect(() => {
     if (!insightId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch
       setState({ data: null, status: "idle", error: null });
       return;
     }

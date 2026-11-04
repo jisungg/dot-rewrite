@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -50,13 +50,16 @@ export default function AddSpaceModal({
   const [color, setColor] = useState(space?.color ?? "#4F46E5");
   const [errorMessage, setErrorMessage] = useState("");
 
-  useEffect(() => {
+  // Re-seed the form when a different space is passed in.
+  const [prevSpace, setPrevSpace] = useState(space);
+  if (space !== prevSpace) {
+    setPrevSpace(space);
     if (space) {
       setName(space.name);
       setCode(space.code);
       setColor(space.color);
     }
-  }, [space]);
+  }
 
   const validate = (): string | null => {
     if (!name.trim()) return "Please enter a name.";

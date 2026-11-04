@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { Check, Sparkles, GraduationCap, Loader2 } from "lucide-react";
+import { Check, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 
@@ -282,7 +282,7 @@ export default function PricingPlans() {
                 )}
                 {plan.highlight && checkoutError && (
                   <div className="mt-2 text-[11px] text-blue-100/90">
-                    Couldn't start checkout: {checkoutError}
+                    Couldn&apos;t start checkout: {checkoutError}
                   </div>
                 )}
               </div>

@@ -102,6 +102,7 @@ export default function FeatureShowcase() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- start rotation timers on mount
     startProgress();
     startRotation();
     return () => {

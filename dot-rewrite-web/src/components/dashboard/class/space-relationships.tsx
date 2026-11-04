@@ -164,6 +164,7 @@ export default function SpaceRelationships({
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch
     setLoading(true);
     setError(null);
     (async () => {

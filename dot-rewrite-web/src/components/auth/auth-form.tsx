@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { AlertCircle, Check, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,21 +34,26 @@ export function AuthForm({
   submitFunction,
   onError,
 }: AuthFormProps) {
-  const [formData, setFormData] = useState<Record<string, string>>({});
+  const emptyFormData = (fs: FormField[]) =>
+    fs.reduce<Record<string, string>>((acc, f) => {
+      acc[f.id] = "";
+      return acc;
+    }, {});
+  const [formData, setFormData] = useState<Record<string, string>>(() =>
+    emptyFormData(fields),
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [success, setSuccess] = useState("");
 
-  useEffect(() => {
-    setFormData(
-      fields.reduce<Record<string, string>>((acc, f) => {
-        acc[f.id] = "";
-        return acc;
-      }, {}),
-    );
-  }, [fields]);
+  // Reset values when the field set changes.
+  const [prevFields, setPrevFields] = useState(fields);
+  if (fields !== prevFields) {
+    setPrevFields(fields);
+    setFormData(emptyFormData(fields));
+  }
 
   const validateField = (id: string, value: string) => {
     const field = fields.find((f) => f.id === id);

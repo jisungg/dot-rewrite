@@ -225,6 +225,7 @@ export default function Dot({
     let msTimer: ReturnType<typeof setInterval> | undefined;
 
     if (loading) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stopwatch when a run starts
       setElapsedTime(0);
       setMilliseconds(0);
       timer = setInterval(() => setElapsedTime((prev) => prev + 1), 1000);

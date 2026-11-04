@@ -6,7 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
 } from "react";
 import type { ThemePreference } from "@/data/types";
 
@@ -30,14 +30,37 @@ function readStoredTheme(): Theme {
   return "system";
 }
 
+const themeListeners = new Set<() => void>();
+
 function writeStoredTheme(theme: Theme) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  themeListeners.forEach((l) => l());
 }
+
+function subscribeStoredTheme(onChange: () => void) {
+  themeListeners.add(onChange);
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === THEME_STORAGE_KEY) onChange();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    themeListeners.delete(onChange);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 function systemPrefersDark(): boolean {
   if (typeof window === "undefined") return false;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return window.matchMedia(DARK_QUERY).matches;
+}
+
+function subscribeSystemDark(onChange: () => void) {
+  const mq = window.matchMedia(DARK_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
 }
 
 function applyThemeClass(resolved: ResolvedTheme) {
@@ -48,17 +71,16 @@ function applyThemeClass(resolved: ResolvedTheme) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("system");
-  const [systemDark, setSystemDark] = useState<boolean>(false);
-
-  useEffect(() => {
-    setThemeState(readStoredTheme());
-    setSystemDark(systemPrefersDark());
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
+  const theme = useSyncExternalStore<Theme>(
+    subscribeStoredTheme,
+    readStoredTheme,
+    () => "system",
+  );
+  const systemDark = useSyncExternalStore(
+    subscribeSystemDark,
+    systemPrefersDark,
+    () => false,
+  );
 
   const resolvedTheme: ResolvedTheme = useMemo(() => {
     if (theme === "system") return systemDark ? "dark" : "light";
@@ -70,7 +92,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [resolvedTheme]);
 
   const setTheme = useCallback((next: Theme) => {
-    setThemeState(next);
     writeStoredTheme(next);
   }, []);
 

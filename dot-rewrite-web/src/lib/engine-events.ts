@@ -31,6 +31,5 @@ export function useEngineUpdates(
     };
     window.addEventListener(EVENT, onEvent as EventListener);
     return () => window.removeEventListener(EVENT, onEvent as EventListener);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }

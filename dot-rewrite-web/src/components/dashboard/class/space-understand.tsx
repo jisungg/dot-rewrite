@@ -106,14 +106,11 @@ export default function SpaceUnderstand({
     [userNotes],
   );
 
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(
+  const [pickedNoteId, setSelectedNoteId] = useState<string | null>(
     sortedNotes[0]?.id ?? null,
   );
-  useEffect(() => {
-    if (!selectedNoteId && sortedNotes.length > 0) {
-      setSelectedNoteId(sortedNotes[0].id);
-    }
-  }, [sortedNotes, selectedNoteId]);
+  // Fall back to the newest note until the user picks one.
+  const selectedNoteId = pickedNoteId ?? sortedNotes[0]?.id ?? null;
 
   const selectedNote = useMemo(
     () => userNotes.find((n) => n.id === selectedNoteId) ?? null,
@@ -140,6 +137,7 @@ export default function SpaceUnderstand({
   // Seed from cache on note switch + auto-load.
   useEffect(() => {
     if (!selectedNote) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- seed/fetch pack on note change
       setPack(null);
       setPackCached(false);
       setByQ({});
@@ -189,8 +187,8 @@ export default function SpaceUnderstand({
     if (!selectedNote) return;
     if (pack) return;
     if (loadingPack) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- seed/fetch pack on note change
     void generate(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNote?.id]);
 
   const updateLocal = (qid: string, patch: Partial<LocalState>) =>

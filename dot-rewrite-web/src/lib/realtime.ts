@@ -25,7 +25,9 @@ export function useRealtimeTable(args: {
 }): void {
   const { table, filter, enabled = true, schema = "public", onChange } = args;
   const handlerRef = useRef(onChange);
-  handlerRef.current = onChange;
+  useEffect(() => {
+    handlerRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     if (!enabled || typeof window === "undefined") return;
@@ -36,7 +38,6 @@ export function useRealtimeTable(args: {
     const channel = supabase.channel(tag).on(
       "postgres_changes",
       // The supabase-js types don't expose every union, so cast.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       {
         event: "*",
         schema,

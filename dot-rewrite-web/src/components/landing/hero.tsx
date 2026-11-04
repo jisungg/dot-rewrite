@@ -119,7 +119,7 @@ export default function Hero() {
           id="get-started"
           accent="start"
           eyebrow="Why not try it just once?"
-          title={<>Just write your first note, and it'll be smooth sailing.</>}
+          title={<>Just write your first note, and it&apos;ll be smooth sailing.</>}
           lead="Free tier covers your first three classes. Sign up, and start noting."
           spacing="tight"
         >

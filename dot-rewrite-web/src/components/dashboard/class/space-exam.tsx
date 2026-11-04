@@ -149,7 +149,6 @@ export default function SpaceExam({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedSpace.id]);
 
   // Tick once a second when running.
@@ -204,6 +203,7 @@ export default function SpaceExam({
   // Auto-submit when timer hits zero.
   useEffect(() => {
     if (phase === "running" && remaining === 0 && duration > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-submit when timer expires
       void finishExam(true);
     }
   }, [phase, remaining, duration, finishExam]);
