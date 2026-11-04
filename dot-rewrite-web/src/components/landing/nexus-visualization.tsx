@@ -77,19 +77,44 @@ const notes: Note[] = [
 
 const edges: Edge[] = [
   // similarity inside Linear Algebra
-  { source: "ln-vectors", target: "ln-dot", kind: "similarity", strength: 0.82 },
+  {
+    source: "ln-vectors",
+    target: "ln-dot",
+    kind: "similarity",
+    strength: 0.82,
+  },
   { source: "ln-dot", target: "ln-orth", kind: "similarity", strength: 0.71 },
   { source: "ln-orth", target: "ln-proj", kind: "similarity", strength: 0.78 },
   { source: "ln-dot", target: "ln-proj", kind: "similarity", strength: 0.86 },
-  { source: "ln-vectors", target: "ln-basis", kind: "similarity", strength: 0.55 },
+  {
+    source: "ln-vectors",
+    target: "ln-basis",
+    kind: "similarity",
+    strength: 0.55,
+  },
   { source: "ln-basis", target: "ln-eigen", kind: "similarity", strength: 0.5 },
 
   // similarity inside Calculus
-  { source: "ca-limits", target: "ca-deriv", kind: "similarity", strength: 0.76 },
-  { source: "ca-deriv", target: "ca-chain", kind: "similarity", strength: 0.74 },
+  {
+    source: "ca-limits",
+    target: "ca-deriv",
+    kind: "similarity",
+    strength: 0.76,
+  },
+  {
+    source: "ca-deriv",
+    target: "ca-chain",
+    kind: "similarity",
+    strength: 0.74,
+  },
   { source: "ca-deriv", target: "ca-int", kind: "similarity", strength: 0.43 },
   { source: "ca-int", target: "ca-series", kind: "similarity", strength: 0.41 },
-  { source: "ca-series", target: "ca-taylor", kind: "similarity", strength: 0.83 },
+  {
+    source: "ca-series",
+    target: "ca-taylor",
+    kind: "similarity",
+    strength: 0.83,
+  },
 
   // similarity inside Probability
   { source: "pr-cond", target: "pr-bayes", kind: "similarity", strength: 0.88 },
@@ -202,7 +227,6 @@ export default function NexusVisualization() {
       window.removeEventListener("resize", debounced);
     };
   }, []);
-
 
   const beginDrag = (cx: number, cy: number) => {
     setDragging(true);
@@ -360,10 +384,7 @@ export default function NexusVisualization() {
                           ? 0.85
                           : 0.12
                         : Math.min(0.8, 0.35 + e.strength * 0.5);
-                      const width = Math.max(
-                        0.8,
-                        Math.sqrt(e.strength * 4),
-                      );
+                      const width = Math.max(0.8, Math.sqrt(e.strength * 4));
                       return (
                         <line
                           key={i}
@@ -374,9 +395,7 @@ export default function NexusVisualization() {
                           stroke={stroke}
                           strokeWidth={width}
                           strokeOpacity={opacity}
-                          strokeDasharray={
-                            e.kind === "confusion" ? "4 3" : ""
-                          }
+                          strokeDasharray={e.kind === "confusion" ? "4 3" : ""}
                           markerEnd={
                             e.kind === "prereq" ? "url(#lp-arrow)" : undefined
                           }
@@ -445,9 +464,9 @@ export default function NexusVisualization() {
                       if (!pos) return null;
                       const isActive = activeId === n.id;
                       const isHover = hoverId === n.id;
-                      const isNeighbor =
-                        !!neighborIds && neighborIds.has(n.id);
-                      const showAlways = !focusedId && (isCompact ? false : true);
+                      const isNeighbor = !!neighborIds && neighborIds.has(n.id);
+                      const showAlways =
+                        !focusedId && (isCompact ? false : true);
                       const show =
                         isActive || isHover || isNeighbor || showAlways;
                       if (!show) return null;
@@ -480,7 +499,10 @@ export default function NexusVisualization() {
                     <div className="grid gap-y-1">
                       {(
                         Object.entries(clusterMeta) as Array<
-                          [keyof typeof clusterMeta, { label: string; color: string }]
+                          [
+                            keyof typeof clusterMeta,
+                            { label: string; color: string },
+                          ]
                         >
                       ).map(([key, meta]) => (
                         <div key={key} className="flex items-center gap-1.5">
@@ -532,8 +554,8 @@ export default function NexusVisualization() {
                 Relations
               </div>
               <p className="text-[10.5px] text-slate-500 leading-relaxed">
-                Color = parent topic. Toggle layers to surface dependencies
-                and confusion between notes.
+                Color = parent topic. Toggle layers to surface dependencies and
+                confusion between notes.
               </p>
             </div>
 
@@ -606,31 +628,31 @@ export default function NexusVisualization() {
                 Clusters
               </div>
               <ul className="space-y-1">
-                {(Object.keys(clusterMeta) as Array<keyof typeof clusterMeta>).map(
-                  (k) => {
-                    const meta = clusterMeta[k];
-                    const count = notes.filter((n) => n.parent === k).length;
-                    return (
-                      <li
-                        key={k}
-                        className="flex items-center justify-between rounded px-1.5 py-1 text-[10.5px] text-slate-700"
-                      >
-                        <span className="flex items-center gap-1.5 truncate">
-                          <span
-                            className="h-1.5 w-1.5 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: meta.color }}
-                          />
-                          <span className="truncate font-medium">
-                            {meta.label}
-                          </span>
+                {(
+                  Object.keys(clusterMeta) as Array<keyof typeof clusterMeta>
+                ).map((k) => {
+                  const meta = clusterMeta[k];
+                  const count = notes.filter((n) => n.parent === k).length;
+                  return (
+                    <li
+                      key={k}
+                      className="flex items-center justify-between rounded px-1.5 py-1 text-[10.5px] text-slate-700"
+                    >
+                      <span className="flex items-center gap-1.5 truncate">
+                        <span
+                          className="h-1.5 w-1.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: meta.color }}
+                        />
+                        <span className="truncate font-medium">
+                          {meta.label}
                         </span>
-                        <span className="text-[9px] text-slate-400 tabular-nums">
-                          {count}
-                        </span>
-                      </li>
-                    );
-                  },
-                )}
+                      </span>
+                      <span className="text-[9px] text-slate-400 tabular-nums">
+                        {count}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
 
@@ -639,16 +661,16 @@ export default function NexusVisualization() {
                 Tags
               </div>
               <div className="flex flex-wrap gap-1">
-                {Array.from(
-                  new Set(notes.flatMap((n) => n.tags ?? [])),
-                ).map((t) => (
-                  <span
-                    key={t}
-                    className="text-[9.5px] rounded-full px-1.5 py-0.5 bg-slate-50 border border-slate-200 text-slate-600"
-                  >
-                    #{t}
-                  </span>
-                ))}
+                {Array.from(new Set(notes.flatMap((n) => n.tags ?? []))).map(
+                  (t) => (
+                    <span
+                      key={t}
+                      className="text-[9.5px] rounded-full px-1.5 py-0.5 bg-slate-50 border border-slate-200 text-slate-600"
+                    >
+                      #{t}
+                    </span>
+                  ),
+                )}
               </div>
             </div>
 
@@ -681,7 +703,7 @@ export default function NexusVisualization() {
         <div className="h-[2px] w-full bg-gradient-to-r from-[#0061ff] via-[#60efff] to-[#0061ff] bg-[length:200%_100%] animate-gradient-x" />
       </motion.div>
       <p className="text-center text-[12px] text-slate-500 mt-5 max-w-xl mx-auto">
-        The actual Nexus tab — every node is a note, colored by its topic
+        The actual Nexus tab where every node is a note, colored by its topic
         cluster, with similarity, dependency, and confusion edges layered on
         top.
       </p>

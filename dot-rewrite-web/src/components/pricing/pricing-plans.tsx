@@ -34,14 +34,26 @@ const plans: Plan[] = [
       { label: "Editor, notes, spaces", delta: "Always free" },
       { label: "Up to 3 spaces", delta: "Plus: unlimited" },
       { label: "150 notes per space", delta: "Plus: unlimited" },
-      { label: "Nexus graph + community hulls", delta: "Plus: + anchors, typed relations, labeled communities" },
-      { label: "Basic Insights (orphans, emerging)", delta: "Plus: all 7 (bridges, anchors, contradictions, chains, reach…)" },
+      {
+        label: "Nexus graph + community hulls",
+        delta: "Plus: + anchors, typed relations, labeled communities",
+      },
+      {
+        label: "Basic Insights (orphans, emerging)",
+        delta: "Plus: all 7 (bridges, anchors, contradictions, chains, reach…)",
+      },
       { label: "Dot: 20 messages per day", delta: "Plus: unlimited" },
-      { label: "Letters: 15 messages per day across all 5", delta: "Plus: unlimited" },
+      {
+        label: "Letters: 15 messages per day across all 5",
+        delta: "Plus: unlimited",
+      },
       { label: "Understand: 3 packs per day", delta: "Plus: unlimited" },
       { label: "Exam: 1 per week", delta: "Plus: unlimited" },
       { label: "Auto-summaries: 10 per day", delta: "Plus: unlimited" },
-      { label: "Manual engine analysis: 5 per day", delta: "Plus: unlimited and priority" },
+      {
+        label: "Manual engine analysis: 5 per day",
+        delta: "Plus: unlimited and priority",
+      },
     ],
   },
   {
@@ -55,8 +67,14 @@ const plans: Plan[] = [
     features: [
       { label: "Everything in Free, with no daily caps" },
       { label: "Unlimited spaces and notes" },
-      { label: "Full Nexus intelligence: anchors (god-nodes), bridges, typed relations, and labeled communities" },
-      { label: "All 7 Insight kinds: bridges, anchors, dependency chains, contradictions, concept reach, emerging clusters, and orphans" },
+      {
+        label:
+          "Full Nexus intelligence: anchors (god-nodes), bridges, typed relations, and labeled communities",
+      },
+      {
+        label:
+          "All 7 Insight kinds: bridges, anchors, dependency chains, contradictions, concept reach, emerging clusters, and orphans",
+      },
       { label: "LLM-extracted typed relations on bridge + anchor notes" },
       { label: "Unlimited Dot, Letters, Understand, Exam" },
       { label: "Unlimited summaries; priority engine analysis" },
@@ -75,7 +93,9 @@ export default function PricingPlans() {
   const startCheckout = async () => {
     setCheckoutError(null);
     // Must be signed in to start checkout — bounce to sign-up otherwise.
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       router.push("/sign-up?intent=plus");
       return;
@@ -204,7 +224,9 @@ export default function PricingPlans() {
                       >
                         <Check
                           className={`h-4 w-4 shrink-0 mt-0.5 ${
-                            plan.highlight ? "text-blue-100" : "text-emerald-500"
+                            plan.highlight
+                              ? "text-blue-100"
+                              : "text-emerald-500"
                           }`}
                         />
                         <div className="min-w-0">
@@ -269,14 +291,14 @@ export default function PricingPlans() {
         })}
       </div>
 
-      <div className="max-w-3xl mx-auto mt-8 flex items-start gap-3 rounded-xl border border-emerald-200/70 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-950/20 p-4">
+      {/* <div className="max-w-3xl mx-auto mt-8 flex items-start gap-3 rounded-xl border border-emerald-200/70 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-950/20 p-4">
         <GraduationCap className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
         <div className="text-sm text-zinc-700 dark:text-zinc-200">
           <span className="font-medium">Plus Student</span> is the only paid tier
           today, built around how a student actually uses the app. No long
           contracts, cancel anytime; the Free tier is permanent and not a trial.
         </div>
-      </div>
+      </div> */}
     </section>
   );
 }

@@ -105,29 +105,9 @@ export function AuthLayout({
               color: "#52525b",
             }}
           >
-            <p>
-              By signing up, you agree to our terms of service and privacy
-              policy. We use cookies for analytics and personalized content. We
-              do not share your personal information with third parties.
+            <p className="text-xs">
+              We do not share your information with third parties.
             </p>
-            <div className="mt-2 flex flex-col gap-1">
-              <Link
-                href="/terms-of-service"
-                target="_blank"
-                className="text-[12.5px] hover:underline"
-                style={{ color: "#0061ff" }}
-              >
-                Terms of Service ↗
-              </Link>
-              <Link
-                href="/privacy-policy"
-                target="_blank"
-                className="text-[12.5px] hover:underline"
-                style={{ color: "#0061ff" }}
-              >
-                Privacy Policy ↗
-              </Link>
-            </div>
           </div>
         </div>
       </div>

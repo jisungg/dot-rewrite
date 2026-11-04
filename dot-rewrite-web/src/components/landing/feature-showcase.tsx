@@ -34,36 +34,36 @@ type Feature = {
 const features: Feature[] = [
   {
     key: "dot",
-    title: "Built from your notes",
+    title: "Your notes are king. 👑",
     description:
-      "Every AI surface in .note (Dot, summaries, exam questions, and grading) is grounded strictly in what you wrote. No textbook detours, no outside facts.",
+      "Every AI surface in .note (Dot, summaries, exam questions, etc.) is grounded strictly in your notes, with clear sourcing.",
     spaceColor: "#22b8cf",
     spaceName: "Calculus II",
     tab: "dot",
   },
   {
     key: "scope",
-    title: "Keep it in scope",
+    title: "Be as specific as you want. 🤌",
     description:
-      "Ask about a single class, a single note, or a single proof. The retrieval engine only looks where you point it, never past your space's walls.",
+      "Specify the whole workspace or a singular line in a note. The retrieval engine will only look at where it is pointed at, and base all future answers on that scope.",
     spaceColor: "#0061ff",
     spaceName: "All Notes",
     tab: "notes",
   },
   {
     key: "central",
-    title: "Minimalist, focused, central",
+    title: "Minimalist & central. 🙌",
     description:
-      "One workspace per class. Editor, notes, semantic graph, summaries, and agent all live in the same shell, one keystroke apart. No tab-hopping.",
+      "Forget the 50-page Latex document, forget the 1000-slide lecture notes. Write a note, save it, and .note will automatically find relationships and specify what information came from which note.",
     spaceColor: "#f97316",
     spaceName: "Modern Lit.",
     tab: "shell",
   },
   {
     key: "you",
-    title: "Built for you",
+    title: "Your space. ✨",
     description:
-      "Markdown, math, and code: write your way. Dark or light. Pinned notes, drag tags, export PDF. The interface adapts to your study, not the other way around.",
+      ".note renders Katex, code (block and inline), and custom themes. Pin notes, drag tags, export PDF. Do whatever you'd like.",
     spaceColor: "#10b981",
     spaceName: "CS 61A",
     tab: "editor",
@@ -120,9 +120,9 @@ export default function FeatureShowcase() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4">
-      <div className="grid lg:grid-cols-[0.85fr_1.15fr] gap-8 items-start">
+      <div className="grid lg:grid-cols-[0.85fr_1.15fr] gap-8 items-center">
         {/* Feature list */}
-        <div className="space-y-4 lg:pt-2">
+        <div className="space-y-4">
           {features.map((f, i) => (
             <button
               key={f.key}
@@ -375,9 +375,7 @@ function ShellMini() {
             <div
               key={t.name}
               className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] ${
-                i === 1
-                  ? "bg-slate-100 text-slate-900"
-                  : "text-slate-500"
+                i === 1 ? "bg-slate-100 text-slate-900" : "text-slate-500"
               }`}
             >
               <t.icon className="h-3 w-3" />
@@ -398,9 +396,7 @@ function ShellMini() {
             <div
               key={s.name}
               className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] ${
-                i === 1
-                  ? "bg-orange-50 text-orange-700"
-                  : "text-slate-600"
+                i === 1 ? "bg-orange-50 text-orange-700" : "text-slate-600"
               }`}
             >
               <span
@@ -466,8 +462,7 @@ function EditorMini() {
       <div className="p-3 bg-slate-50/40 font-mono text-[11px] leading-relaxed text-slate-700 overflow-hidden">
         <div className="text-slate-400"># Photosynthesis</div>
         <div className="mt-2">
-          Plants convert{" "}
-          <span className="text-emerald-600">sunlight</span>,{" "}
+          Plants convert <span className="text-emerald-600">sunlight</span>,{" "}
           <span className="text-emerald-600">CO₂</span>, and{" "}
           <span className="text-emerald-600">water</span> into glucose.
         </div>
@@ -479,7 +474,8 @@ function EditorMini() {
         <div>- Generates ATP and NADPH</div>
         <div className="text-slate-400 mt-3">## Calvin cycle</div>
         <div className="mt-1">
-          Net equation: <span className="text-blue-600">{"$6CO_2 + 6H_2O"}</span>
+          Net equation:{" "}
+          <span className="text-blue-600">{"$6CO_2 + 6H_2O"}</span>
         </div>
         <div className="text-blue-600">{"→ C_6H_{12}O_6 + 6O_2$"}</div>
       </div>
@@ -511,4 +507,3 @@ function EditorMini() {
     </div>
   );
 }
-

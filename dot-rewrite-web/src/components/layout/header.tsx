@@ -66,12 +66,6 @@ export default function Header() {
           >
             Blog
           </Link>
-          <Link
-            href="/changelog"
-            className="text-sm font-medium text-gray-600 hover:text-[#0061ff] transition-colors"
-          >
-            Changelog
-          </Link>
         </nav>
 
         <div className="absolute right-4 flex items-center space-x-4">

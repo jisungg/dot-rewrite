@@ -19,7 +19,7 @@ import { LandingSection } from "./section";
 
 export default function Hero() {
   return (
-    <section className="container py-24 pt-32">
+    <section className="container py-24 pt-32" key="home">
       <div className="mx-auto space-y-6">
         {/* —— Top of fold ———————————————————————————— */}
         <motion.div
@@ -49,7 +49,7 @@ export default function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.15 }}
         >
-          Your education, <span className="text-[#0061ff]">compiled</span> to
+          Smaller, more <span className="text-[#0061ff]">compact</span> notes to
           learn faster.
         </motion.h1>
 
@@ -59,9 +59,9 @@ export default function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
         >
-          One workspace per class: editor, notes, semantic graph, and an AI
-          tutor that reads only what you wrote. Built for focused, grounded
-          study.
+          .note compresses your notes, finds the relationships between them, and
+          gives you an AI tutor trained only on what you wrote. Hopefully you
+          took good notes.
         </motion.p>
 
         <motion.div
@@ -70,18 +70,6 @@ export default function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.45 }}
         >
-          <div className="inline-flex flex-wrap items-center justify-center gap-3">
-            <Link href="/sign-up">
-              <Button
-                variant="default"
-                className="press bg-[#0061ff] hover:bg-[#0052d6] text-white shadow-[0_8px_22px_-8px_rgba(0,97,255,0.55)]"
-              >
-                Get started
-                <ArrowRight className="ml-1.5 w-3.5 h-3.5" />
-              </Button>
-            </Link>
-          </div>
-
           <LogoCloud />
           <motion.p
             className="text-xs text-zinc-500 mt-4 text-center"
@@ -89,7 +77,7 @@ export default function Hero() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, delay: 1 }}
           >
-            +30 more institutions
+            +0 more institutions (we&apos;re working on it)
           </motion.p>
         </motion.div>
 
@@ -97,94 +85,69 @@ export default function Hero() {
 
         <LandingSection
           id="features"
-          eyebrow="Designed for modern study"
-          title={
-            <>
-              The four ways <span className="text-[#0061ff]">.note</span>{" "}
-              changes your study loop.
-            </>
-          }
-          lead="Every surface (editor, processing pipeline, semantic graph, and AI tutor) is grounded in your notes. Pick a tour stop below or scroll through them all."
+          eyebrow="The Difference?"
+          title={<>Everyone loves minimalistic studying.</>}
+          lead="The AI here doesn't even access the internet (it's banned, actually). The processing pipeline and semantic graph updates dynamically per new note so you don't have to do anything. Most importantly, it's minimal. 😎"
         >
           <FeatureShowcase />
         </LandingSection>
 
         <LandingSection
           id="dot"
-          eyebrow="Meet Dot"
-          title={
-            <>
-              Your study partner,{" "}
-              <span className="text-[#0061ff]">trained on your notes only</span>
-              .
-            </>
-          }
-          lead="Dot reads only the notes inside the space, retrieves the relevant ones for each question, and answers in plain prose with citations. Nothing invented; nothing borrowed from elsewhere."
+          eyebrow="Who's Dot?"
+          title={<>The partner who only knows you and your notes.</>}
+          lead="Dot is self-contained, reading only the notes you choose, in the workspace that you choose. Every answer is written the way you wrote it, with plain prose, with citations (to your notes)."
         >
           <MeetDot />
         </LandingSection>
 
         <LandingSection
           id="letters"
-          eyebrow="And the Letters"
-          title={
-            <>
-              Five expert <span className="text-[#0061ff]">Letters</span>, one
-              per academic discipline.
-            </>
-          }
-          lead="Where Dot focuses on your class, the Letters connect your studies to public academia. Each one is trained on a curated, auditable corpus per subject."
+          eyebrow="If you want more?"
+          title={<>Letters, per academic discipline.</>}
+          lead="Dot it your personal partner. Each of the Letters connect your notes (if you're curious) to public academia, and is trained on a curated, auditable corpus per subject."
         >
           <LettersAI />
         </LandingSection>
 
         <LandingSection
           id="nexus"
-          eyebrow="Introducing Nexus"
-          title={
-            <>
-              The shape of your knowledge,{" "}
-              <span className="text-[#0061ff]">drawn from your notes</span>.
-            </>
-          }
-          lead="Nexus turns your notes into a semantic graph. It clusters by topic, draws prerequisite arrows between dependent concepts, and flags pairs students commonly confuse."
+          eyebrow="Introducing Nexus?"
+          title={<>How does Note A relate to Note B, and if so, in what way?</>}
+          lead="Nexus embeds every note into a semantic graph, using Leiden clustering by topic, typed prerequisite edges, and centrality-ranked anchor concepts. See if notes are related, or depend on each other."
         >
           <NexusVisualization />
         </LandingSection>
 
         <LandingSection
           id="relationships"
-          eyebrow="And the Relationships underneath"
-          title={
-            <>
-              See exactly <span className="text-[#0061ff]">why</span> a cluster
-              formed.
-            </>
-          }
-          lead="The Relationships tab opens up the structure Nexus visualizes: the topic hierarchy, the evidence terms behind each cluster, and the noise the engine threw out. Browse subjects like a tree, then drill into any cluster."
+          eyebrow="Want the specifics?"
+          title={<>Why does Note A relate to Note B? What defines a cluster?</>}
+          lead="The Relationships tab shows evidence behind the Nexus visualization, including the topic hierarchy, key terms behind each cluster, and the noise the engine threw out. (Could probably help you study?)"
         >
           <RelationshipsShowcase />
         </LandingSection>
 
         <LandingSection
           id="get-started"
-          eyebrow="Get started"
-          title={
-            <>
-              Create a class,{" "}
-              <span className="text-[#0061ff]">drop in a note</span>, and meet
-              your own AI.
-            </>
-          }
-          lead="Free tier covers your first three classes. No card, no setup wizard. Sign in and you're in the editor."
+          eyebrow="Why not try it just once?"
+          title={<>Just write your first note, and it'll be smooth sailing.</>}
+          lead="Free tier covers your first three classes. Sign up, and start noting."
           spacing="tight"
         >
-          <AppShowcaseCTA />
+          {/* <AppShowcaseCTA />
           <div className="mt-10 flex justify-center">
             <Link href="/sign-up">
               <Button className="press bg-[#0061ff] hover:bg-[#0052d6] text-white shadow-[0_8px_22px_-8px_rgba(0,97,255,0.55)]">
                 Start your first class
                 <ArrowRight className="ml-1.5 w-3.5 h-3.5" />
+              </Button>
+            </Link> */}
+          {/* </div> */}
+          <div className="mt-10 flex justify-center">
+            <Link href="/#home">
+              <Button className="press bg-[#0061ff] hover:bg-[#0052d6] text-white shadow-[0_8px_22px_-8px_rgba(0,97,255,0.55)]">
+                Back to Top ⬆️
               </Button>
             </Link>
           </div>

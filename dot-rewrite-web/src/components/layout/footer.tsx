@@ -12,8 +12,8 @@ export default function Footer() {
               <span className="font-medium text-lg">.note</span>
             </div>
             <p className="text-gray-600 max-w-xs">
-              Making education smarter through AI. Transform your lecture notes
-              into a personal AI tutor.
+              A personal project dedicated to helping me get through
+              computationally hard math and computer science classes.
             </p>
             <p className="text-sm text-gray-500">
               &copy; {currentYear} .note. All rights reserved.
@@ -33,22 +33,22 @@ export default function Footer() {
                   Pricing
                 </Link>
               </li>
-              <li>
+              {/* <li>
                 <Link
                   href="/integrations"
                   className="text-zinc-500 hover:text-zinc-900 transition-colors"
                 >
                   Integrations
                 </Link>
-              </li>
-              <li>
+              </li> */}
+              {/* <li>
                 <Link
                   href="/changelog"
                   className="text-zinc-500 hover:text-zinc-900 transition-colors"
                 >
                   Changelog
                 </Link>
-              </li>
+              </li> */}
               <li>
                 <Link
                   href="#"
@@ -62,7 +62,7 @@ export default function Footer() {
 
           <div className="space-y-4">
             <h4 className="font-medium text-zinc-900 text-sm uppercase tracking-wider">
-              Company
+              MISC
             </h4>
             <ul className="space-y-3 text-sm">
               <li>
@@ -81,28 +81,12 @@ export default function Footer() {
                   Blog
                 </Link>
               </li>
-              <li>
-                <Link
-                  href="#"
-                  className="text-zinc-500 hover:text-zinc-900 transition-colors"
-                >
-                  Careers
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="#"
-                  className="text-zinc-500 hover:text-zinc-900 transition-colors"
-                >
-                  Contact
-                </Link>
-              </li>
             </ul>
           </div>
 
           <div className="space-y-4">
             <h4 className="font-medium text-zinc-900 text-sm uppercase tracking-wider">
-              Legal
+              Hello!
             </h4>
             <ul className="space-y-3 text-sm">
               <li>
@@ -110,10 +94,10 @@ export default function Footer() {
                   href="#"
                   className="text-zinc-500 hover:text-zinc-900 transition-colors"
                 >
-                  Privacy Policy
+                  Thanks for making it to bottom of the page!
                 </Link>
               </li>
-              <li>
+              {/* <li>
                 <Link
                   href="#"
                   className="text-zinc-500 hover:text-zinc-900 transition-colors"
@@ -136,7 +120,7 @@ export default function Footer() {
                 >
                   GDPR
                 </Link>
-              </li>
+              </li> */}
             </ul>
           </div>
         </div>
