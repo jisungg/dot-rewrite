@@ -397,3 +397,41 @@ html {
 .dark ::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 255, 255, 0.32);
 }
+
+/* ===================================================================
+ * Landing ambience: slow drifting color fields behind marketing pages.
+ * =================================================================== */
+@keyframes drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(6%, 4%, 0) scale(1.08); }
+}
+@keyframes drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05); }
+  50%      { transform: translate3d(-5%, 6%, 0) scale(0.95); }
+}
+@keyframes drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(-4%, -5%, 0) scale(1.1); }
+}
+.animate-drift-a { animation: drift-a 18s ease-in-out infinite; }
+.animate-drift-b { animation: drift-b 22s ease-in-out infinite; }
+.animate-drift-c { animation: drift-c 26s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-drift-a,
+  .animate-drift-b,
+  .animate-drift-c {
+    animation: none;
+  }
+}
+
+/* Section glow: slow turn + gentle breathing of a conic gradient. */
+@keyframes glow-spin {
+  0%   { transform: rotate(0deg) scale(1); }
+  50%  { transform: rotate(180deg) scale(1.12); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+.animate-glow-spin { animation: glow-spin 28s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-glow-spin { animation: none; }
+}

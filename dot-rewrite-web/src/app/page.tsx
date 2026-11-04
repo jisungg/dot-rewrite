@@ -2,6 +2,7 @@ import Header from "@/components/layout/header";
 import Footer from "@/components/layout/footer";
 import Hero from "@/components/landing/hero";
 import { ForceLightTheme } from "@/components/force-light-theme";
+import { LandingBackground } from "@/components/landing/landing-background";
 
 // `/` lives outside the (landing) route group, so it owns its own chrome.
 // Same shape as the (landing) layout so the marketing site looks
@@ -12,12 +13,9 @@ import { ForceLightTheme } from "@/components/force-light-theme";
 
 export default async function Home() {
   return (
-    <div className="relative min-h-screen bg-white text-zinc-900">
+    <div className="relative min-h-screen overflow-x-clip bg-white text-zinc-900">
       <ForceLightTheme />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute top-0 left-0 right-0 h-[640px] bg-[radial-gradient(circle_520px_at_50%_220px,#C9EBFF,transparent)]"
-      />
+      <LandingBackground />
       <Header />
       <main className="relative mx-auto flex flex-col items-center">
         <Hero />
