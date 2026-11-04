@@ -1,7 +1,6 @@
 "use client";
 
 import { type ReactNode } from "react";
-import Link from "next/link";
 
 type AuthLayoutProps = {
   children: ReactNode;
