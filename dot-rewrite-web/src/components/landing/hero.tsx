@@ -2,11 +2,9 @@
 
 import Link from "next/link";
 import { motion } from "motion/react";
-import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-import AppShowcaseCTA from "./app-showcase";
 import FeatureShowcase from "./feature-showcase";
 import LettersAI from "./letters-ai";
 import HeroCompress from "./hero-compress";
